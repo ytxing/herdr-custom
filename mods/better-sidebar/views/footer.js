@@ -46,8 +46,6 @@ export class Footer {
       .gap(2)
       .items_center()
       .bg(t.chrome)
-      .border_t(1)
-      .border_color(t.border)
       .child(
         this.button("settings", "Settings", () => run("app.settings"), t, [
           Icon("settings"),

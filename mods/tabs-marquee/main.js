@@ -52,7 +52,10 @@ function label(tab, lead) {
   const live = clean(lead.title);
   // clean() would strip a path's leading ~ or /: test the title with only its status glyph gone.
   const path = /^[~/]|^[A-Za-z]:\\/.test((lead.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, ""));
-  const telling = live && live !== lead.terminal && live !== prog && !path && !live.includes("@") && live.toLowerCase() !== lead.program.key;
+  // Only a shell's "user@host: path" goes without saying; an agent's own
+  // session name may contain "@" and still tells what the tab is about.
+  const shellTitle = /^[^\s@]+@[^\s@]+:\s/.test(live);
+  const telling = live && live !== lead.terminal && live !== prog && !path && !shellTitle && live.toLowerCase() !== lead.program.key;
   return (tab.name === prog || !tab.named) && telling ? live : base;
 }
 

@@ -8,8 +8,8 @@ A compact coding workspace with a combined Spaces/Tabs/Status sidebar, a horizon
 
 - A 268 px left sidebar with a 46 px workspace chrome header, the Better Sidebar lists view, and a 28 px footer.
 - Better Sidebar offers Spaces, Tabs, and Status views. It groups workspaces by machine, nests Git worktrees, shows agent status and sub-agent trees, and displays repository and pull-request details when available.
-- A 42 px tab bar above the main work area. Tabs scroll horizontally, show their number and activity state, and provide Files and Changes panel controls.
-- The main pane uses a 30 px agent-aware header with the program icon, agent or terminal name, working directory, status, and pane actions on hover.
+- A 42 px tab bar above the main work area. Tabs scroll horizontally, show their number and activity state, and provide Files and Changes panel controls. Unnamed tabs follow the current agent title when it describes the task, including session names containing `@`.
+- The main pane uses a 30 px agent-aware header with the program icon, terminal's launch name (or program name), terminal address, working directory, status, and pane actions on hover.
 - A hidden 368 px right panel contains Files and Changes. The 28 px workspace status bar remains along the bottom.
 - Colors and borders use Herdr theme tokens. The layout leaves the terminal background, pane border, focus border, and window chrome tied to the selected theme.
 

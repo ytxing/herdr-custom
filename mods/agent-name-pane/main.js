@@ -6,7 +6,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, props, run, theme, home, layout } from "herdr";
+import { panes, terminals, props, run, theme, home, layout } from "herdr";
 
 // Match the first visible tab frame, including the active child of a stack.
 function paneFrame(node) {
@@ -35,17 +35,13 @@ function folder(cwd) {
   return cwd === h ? "~" : cwd.startsWith(h + "/") ? "~" + cwd.slice(h.length) : cwd;
 }
 
-// A name the way the tab bar reads it: the agent's live title, else its
-// program; a path or the program's own name is not a name.
-const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").replace(/^\[ [!.] \] /, "").trim();
-
-function title(p) {
-  const prog = p.program?.name;
-  const live = clean(p.title);
-  // clean() would strip a path's leading ~ or /: test the title with only its status glyph gone.
-  const path = /^[~/]|^[A-Za-z]:\\/.test((p.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, ""));
-  const telling = p.program?.agent && live && live !== p.terminal && live !== prog && !path && !live.includes("@") && live.toLowerCase() !== p.program.key;
-  return telling ? live : prog || live || "shell";
+// The pane is named when its terminal starts: the name given with
+// `hc run --name` (hcn's ds, cx-2), else its program's name. A later agent
+// summary never renames it.
+function label(p) {
+  if (!p.terminal) return p.program?.name || p.title || "shell";
+  const term = terminals().find((t) => t.address === p.terminal);
+  return term?.name || p.program?.name || p.title || "shell";
 }
 
 export default class Pane extends View {
@@ -73,7 +69,7 @@ export default class Pane extends View {
     const t = theme();
     const p = this.me();
     if (!p) return div();
-    const name = p.terminal ? `${title(p)}@${p.terminal}` : title(p);
+    const name = label(p);
     const pic = icon(p.program, 14, t.dim);
     const st = p.status;
     const pane = p.pane;
@@ -92,7 +88,16 @@ export default class Pane extends View {
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })
       .on_click(() => run("pane.focus", { pane }))
       .when(Boolean(pic), (el) => el.child(pic))
-      .child(div().flex_none().truncate().max_w(260).font_medium().text_color(t.foreground).child(name))
+      .child(
+        h_flex()
+          .flex_none()
+          .items_center()
+          .gap(6)
+          .child(div().truncate().max_w(260).font_medium().text_color(t.foreground).child(name))
+          .when(Boolean(p.terminal), (el) =>
+            el.child(div().flex_none().text_color(t.dim).child(`· ${p.terminal}`)),
+          ),
+      )
       .child(div().flex_1().truncate().text_color(t.dim).child(folder(p.cwd)))
       .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
       .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
