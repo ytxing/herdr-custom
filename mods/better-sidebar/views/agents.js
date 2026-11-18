@@ -59,6 +59,8 @@ function title(tab, l) {
   const telling = live && live !== l?.terminal && live !== prog && !path && !shellTitle && live.toLowerCase() !== l.program.key;
   return (tab.name === prog || !tab.named) && telling ? live : base;
 }
+// Agent marks take the agent's own color from its icon; other programs keep the theme's.
+const AGENT_COLORS = { claude: "#D97757", codex: "#7A9DFF" };
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
@@ -242,15 +244,18 @@ export class Agents {
     const color = t[a.status] ?? t.dim;
     if (a.status === "working") {
       const phase = [...(a.address ?? "")].reduce((value, char) => (value * 33 + char.codePointAt(0)) >>> 0, 5381);
-      const low = 0.3 + ((phase >>> 8) % 16) / 100;
-      const high = 0.85 + ((phase >>> 16) % 16) / 100;
+      // One 0.3-1.0 swing for every agent; the hash sets direction and period.
+      const low = 0.3;
+      const high = 1;
       const reversed = (phase & 1) === 1;
+      // The agent's own color; each address also sets its own breath.
+      const tint = AGENT_COLORS[a.program?.key] ?? t.working;
       return div()
         .size(7)
         .mx(3)
         .flex_none()
         .rounded(4)
-        .bg(t.working)
+        .bg(tint)
         .accessibility_label("Working")
         .loop("opacity", { from: reversed ? high : low, to: reversed ? low : high, period: 2000 + (phase % 2001) });
     }

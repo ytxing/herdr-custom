@@ -66,13 +66,14 @@ export default class Tabs extends View {
     try { this.panels = JSON.parse(localStorage.getItem("panels") ?? "{}"); } catch { this.panels = {}; }
     if (!this.panels || typeof this.panels !== "object" || Array.isArray(this.panels)) this.panels = {};
     this.swipe = { acc: 0, steps: 0, at: 0, last: 0 };
-    this.tabTextW = {};
-    this.tabViewW = {};
+    this.tabWidths = {};
   }
 
   tabText(c, name) {
-    const textW = this.tabTextW[c.id] ?? 0;
-    const viewW = this.tabViewW[c.id] ?? 0;
+    let widths = this.tabWidths[c.id];
+    if (!widths || widths.text !== name) widths = this.tabWidths[c.id] = { text: name, content: 0, view: 0 };
+    const textW = widths.content;
+    const viewW = widths.view;
     const measured = Math.max(0, Math.ceil(textW - viewW));
     // Prefer the measured overflow; before it arrives, use a calibrated
     // estimate. The estimate is only the text width beyond the 170 px box,
@@ -80,16 +81,16 @@ export default class Tabs extends View {
     const approx = approxWidth(name);
     const estimated = approx > 170 ? Math.ceil(approx - 170) : 0;
     const over = measured > 0 ? measured : estimated;
-    return div().max_w(170).overflow_hidden().flex_none().whitespace_nowrap()
+    return div().flex().items_center().min_w(0).max_w(170).overflow_hidden().whitespace_nowrap()
       .on_size_change((size, cx) => {
         const w = Math.round(size.width);
-        if (this.tabViewW[c.id] !== w) { this.tabViewW[c.id] = w; cx.notify(); }
+        if (widths.view !== w) { widths.view = w; cx.notify(); }
       })
       .child(
         div().id(`tab-text-${c.id}`).flex_none().relative().whitespace_nowrap()
           .on_size_change((size, cx) => {
             const w = Math.round(size.width);
-            if (this.tabTextW[c.id] !== w) { this.tabTextW[c.id] = w; cx.notify(); }
+            if (widths.content !== w) { widths.content = w; cx.notify(); }
           })
           .when(over > 0, (el) => el.loop("left", {
             from: 0,
