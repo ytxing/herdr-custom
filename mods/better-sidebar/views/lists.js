@@ -145,6 +145,7 @@ export class Lists {
           .child(tab("tabs", "Tabs"))
           .child(tab("status", "Status")),
       )
-      .when(this.tab === "spaces", (el) => el.child(this.spaces.newSpaceButton()));
+      // The + stays in every view, so the bar keeps one height and its line one place.
+      .child(this.spaces.newSpaceButton());
   }
 }
