@@ -2,7 +2,7 @@
 // shown as a small Menu/Pane switch instead of a long sentence.
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { run, props, closeOverlay, openOverlay, notify, theme, keys, terminals, panes, spaces } from "herdr";
+import { run, props, closeOverlay, openOverlay, notify, theme, keys, terminals, panes, spaces, shared, setShared } from "herdr";
 
 function icon(name) {
   return `mods/workspace-chrome/${name}.svg`;
@@ -37,7 +37,14 @@ function items(p) {
     ...(term
       ? [
           // The short handle other Herdr agents use: hc read/send <address>.
-          { label: "Copy terminal address", copy: term.address, icon: "terminal" },
+          // The tagged form marks it as a terminal reference in agent messages.
+          {
+            label: "Copy reference",
+            ref: true,
+            terminal: term.address,
+            value: shared("my-menu.copy-as") === "tagged" ? "tagged" : "raw",
+            icon: "terminal",
+          },
           { toggle: true, label: "Right-click", terminal: term.address, value: toProgram ? "program" : "menu" },
         ]
       : []),
@@ -66,11 +73,21 @@ export default class MyMenu extends View {
       });
   }
 
+  // Copy the terminal address in the chosen form: the bare handle agents pass
+  // to hc read/send, or the tagged form they put in their messages.
+  copyAs(terminal, format, cx) {
+    setShared("my-menu.copy-as", format);
+    cx?.write_to_clipboard(format === "tagged" ? `<hc>${terminal}</hc>` : terminal);
+    closeOverlay(props()?.overlay);
+  }
+
   choose(i, cx) {
     const it = items(props())[i];
     if (!it) return;
     const p = props();
-    if (it.picker) {
+    if (it.ref) {
+      this.copyAs(it.terminal, it.value, cx);
+    } else if (it.picker) {
       openOverlay({
         mod: "my-menu",
         kind: "popup",
@@ -213,6 +230,36 @@ export default class MyMenu extends View {
       .children([seg("menu", "Menu"), seg("program", "Pane")]);
   }
 
+  // raw / tagged: each segment copies at once and becomes the default.
+  copySwitchFor(item, t) {
+    const seg = (id) =>
+      div()
+        .id(`rf-${id}`)
+        .h(18)
+        .px(6)
+        .rounded(4)
+        .flex()
+        .items_center()
+        .text_size(10.5)
+        .cursor_pointer()
+        .when(item.value === id, (el) => el.bg(t.selected).text_color(t.foreground))
+        .when(item.value !== id, (el) =>
+          el.text_color(t.dim).hover((s) => s.bg(t.hover).text_color(t.foreground)),
+        )
+        .on_click((_e, cx) => {
+          cx.stop_propagation();
+          this.copyAs(item.terminal, id, cx);
+        })
+        .child(id);
+    return h_flex()
+      .flex_none()
+      .gap(1)
+      .p(1)
+      .rounded(5)
+      .bg(t.raised)
+      .children([seg("raw"), seg("tagged")]);
+  }
+
   render() {
     const t = theme();
     if (props()?.pick === "tab") return this.renderTabPicker(t);
@@ -258,7 +305,8 @@ export default class MyMenu extends View {
                 )
                 .child(div().flex_1().child(it.label))
                 .when(it.toggle, (el) => el.child(this.switchFor(it, t)))
-                .when(!it.toggle, (el) =>
+                .when(it.ref, (el) => el.child(this.copySwitchFor(it, t)))
+                .when(!it.toggle && !it.ref, (el) =>
                   el.child(div().text_size(11).text_color(t.dim).child(it.hint ?? shortcut(it.command, it.args))),
                 ),
             ),

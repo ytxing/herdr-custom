@@ -46,6 +46,7 @@ export class Footer {
       .gap(2)
       .items_center()
       .bg(t.chrome)
+      .pb(2)
       .child(
         this.button("settings", "Settings", () => run("app.settings"), t, [
           Icon("settings"),

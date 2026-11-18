@@ -20,7 +20,7 @@ A compact coding workspace with a combined Spaces/Tabs/Status sidebar, a horizon
 - The tab bar follows the active tab, scrolls long names, supports drag reordering and double-click rename, and opens the tab menu on right-click.
 - The Files and Changes controls select or hide the right panel. Its selection is remembered per space.
 - The pane header focuses its pane. Hovering reveals split, zoom, and close actions.
-- The terminal right-click menu supports splitting, zooming, parking, closing, copying a terminal address, changing right-click routing, and moving a pane to another tab.
+- The terminal right-click menu supports splitting, zooming, parking, closing, copying a terminal address (plain or wrapped in an `<hc>` tag for agent messages), changing right-click routing, and moving a pane to another tab.
 - Better Sidebar reads Git metadata for visible workspaces and watches local repositories for changes. Pull-request status is optional and uses the installed GitHub CLI (`gh`) with the user's existing authentication. The Files and Changes panels run Git commands and read files in the active workspace. Remote workspaces use Herdr's configured machine connection.
 
 ## Built from
