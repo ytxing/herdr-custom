@@ -6,10 +6,20 @@ const quote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
 
 const readSessionInput = `
   pid=$1 app=$2 session=$3
-  pattern= files=
+  pattern= files= entry=
   case "$app" in
     codex) pattern='^n/.*[/]sessions/.*[/]rollout-.*[.]jsonl$' ;;
-    pi) pattern='^n/.*[.]jsonl$' ;;
+    pi)
+      ref="$HOME/.cache/agent-ring/pi/$pid.json"
+      if [ -f "$ref" ]; then
+        snapshot=$(cat "$ref") || exit 0
+        files=$(printf '%s' "$snapshot" | jq -er '.file') || exit 0
+        entry=$(printf '%s' "$snapshot" | jq -er '.entry') || exit 0
+      else
+        # Older Pi extensions expose the transcript as an open file.
+        pattern='^n/.*[.]jsonl$'
+      fi
+      ;;
     claude)
       id=$(jq -er --argjson pid "$pid" 'select(.pid == $pid and .kind == "interactive") | .sessionId' "\${CLAUDE_CONFIG_DIR:-$HOME/.claude}/sessions/$pid.json" 2>/dev/null) || exit 0
       case "$id" in ''|*[!a-fA-F0-9-]*) exit 0 ;; esac
@@ -28,19 +38,42 @@ const readSessionInput = `
   if [ -n "$pattern" ]; then
     files=$(lsof -a -p "$pid" -Fn 2>/dev/null | awk -v pattern="$pattern" '$0 ~ pattern {print substr($0, 2)}' | sort -u)
   fi
+  if [ "$app" = codex ]; then
+    files=$(printf '%s\\n' "$files" | while IFS= read -r file; do
+      [ -f "$file" ] || continue
+      if head -n 1 "$file" | jq -e '
+        .type == "session_meta" and
+        (.payload.thread_source == "user" or
+         (.payload.thread_source == null and .payload.source == "cli"))
+      ' >/dev/null; then
+        printf '%s\\n' "$file"
+      fi
+    done)
+  fi
   case "$files" in ''|*'
 '*) exit 0 ;; esac
-  tail -c 1048576 "$files" | jq -Rsr --arg app "$app" '
+  # macOS provides tail -r and Linux provides tac.
+  if command -v tac >/dev/null 2>&1; then
+    tac "$files"
+  else
+    tail -r "$files"
+  fi | jq -Rn -r --arg app "$app" --arg entry "$entry" '
     def text: if type == "string" then . else [.[]? | select(.type == "text" or .type == "input_text") | .text] | join(" ") end;
-    [split("\\n")[] | fromjson?
-      | if $app == "pi" then select(.type == "message" and .message.role == "user") | .message.content | text
-        elif $app == "claude" then select(.type == "user" and .isSidechain != true and .isMeta != true and .toolUseResult == null) | .message.content | text
-        else .payload | if .type == "user_message" then .message
+    def userContent:
+      if $app == "pi" then
+        select(.type == "message" and .message.role == "user" and ($entry == "" or .id == $entry)) | .message.content
+      elif $app == "claude" then
+        select(.type == "user" and .isSidechain != true and .isMeta != true and .toolUseResult == null
+          and .promptSource != "system" and (.origin.kind == null or .origin.kind == "human"))
+        | .message.content | text | select(test("^<(local-command|bash)-(stdout|stderr)>") | not)
+      else .payload |
+        if .type == "user_message" then .message
         elif .role == "user" and ((.internal_chat_message_metadata_passthrough.content_item_kinds // []) | index("user.text")) != null
-        then .content | text
-        else empty end end
-      | strings | gsub("[[:space:]]+"; " ") | select(test("[^ ]"))]
-    | last // ""'
+        then [.content[]? | select(.type == "input_text" or .type == "text")
+          | select((.text | startswith("<image name=") and endswith(">")) or .text == "</image>" | not)]
+        else empty end
+      end;
+    first(inputs | fromjson? | userContent | text | strings | gsub("[[:space:]]+"; " ") | select(test("[^ ]"))) // ""'
 `;
 
 async function lastInput(address) {
