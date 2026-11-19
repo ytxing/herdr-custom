@@ -2,8 +2,6 @@
 
 Good Agent Info is a Herdr layout built around a sidebar with Spaces, Tabs, and Status views. It organizes local and remote agents by workspace, prioritizes agents that need attention, and groups long-idle agents under Dormant. The layout also includes a scrolling tab bar, agent-aware pane headers, and Files and Changes panels.
 
-![Good Agent Info](preview.png)
-
 ## What you see
 
 - A 268 px left sidebar with a 46 px workspace chrome header, the Better Sidebar lists view, and a 28 px footer.
@@ -38,7 +36,9 @@ Good Agent Info is a Herdr layout built around a sidebar with Spaces, Tabs, and 
 
 Good Agent Info sends Herdr-managed agents on this computer and on remote machines through Agent Ring's macOS notification and sound pools. Agents running outside Herdr keep using Agent Ring's existing hooks and plugins. In Herdr's Settings > Alerts, configure banners, sound playback, and fixed or per-pane sound selection. The MP3 pools live in `mods/agent-ring-toast/sound-fx/`; the same folder path appears in the settings page.
 
-The mod uses Node.js and macOS audio tools. Install `terminal-notifier` for system banners. If a local Agent Ring Codex sender and Herdr's app icon are available, the installer can create a Herdr-branded sender locally. Add MP3s you can use to `sound-fx/done/` and `sound-fx/suspended/` inside the installed mod. Empty pools use macOS system sounds. Disable Herdr's built-in sounds to avoid duplicate playback.
+The mod uses Node.js and macOS audio tools. Install `terminal-notifier` for system banners and `rsvg-convert` (from `librsvg`) for agent logo attachments. If a local Agent Ring Codex sender and Herdr's app icon are available, the installer can create a Herdr-branded sender locally. Add MP3s you can use to `sound-fx/done/` and `sound-fx/suspended/` inside the installed mod. Empty pools use macOS system sounds. Disable Herdr's built-in sounds to avoid duplicate playback.
+
+Completion banners use the latest user input when the active session can be located. The reader needs `jq` on the agent machine, plus `lsof` for Codex and Pi or `sqlite3` for OpenCode. Pi needs `pi-session.ts` loaded as a Pi extension on that machine so the reader can find its active transcript. OpenCode needs an explicit `--session` ID. If the reader cannot resolve a session, the banner keeps the session title and shows `Finished`.
 
 After installing the mod, run `node mods/agent-ring-toast/install-alerts.cjs` while Herdr is running, then reopen Settings. Herdr regenerates its built-in Settings screen on startup. Run the same command after a restart to restore the controls. The saved preferences are retained.
 
