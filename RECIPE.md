@@ -2,6 +2,8 @@
 
 Good Agent Info is a Herdr layout built around a sidebar with Spaces, Tabs, and Status views. It organizes local and remote agents by workspace, prioritizes agents that need attention, and groups long-idle agents under Dormant. The layout also includes a scrolling tab bar, agent-aware pane headers, and Files and Changes panels.
 
+![Good Agent Info layout illustration](preview.png)
+
 ## What you see
 
 - A 268 px left sidebar with a 46 px workspace chrome header, the Better Sidebar lists view, and a 28 px footer.
