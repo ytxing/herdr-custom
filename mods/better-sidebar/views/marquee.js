@@ -1,4 +1,6 @@
 import { div } from "gpui-kit";
+import { Popup } from "gpui-base";
+import { theme } from "herdr";
 
 const MIN_PERIOD_MS = 6000;
 const MS_PER_PX = 180;
@@ -19,7 +21,54 @@ function estimate(text) {
   return width;
 }
 
-export function marquee(owner, key, value, { maxWidth, color, size, grow = false, tooltip = true } = {}) {
+export function clearMarqueeHover(owner) {
+  const hover = owner.marqueeHover;
+  if (!hover) return false;
+  hover.timer.cancel();
+  owner.marqueeHover = undefined;
+  return hover.visible;
+}
+
+function withTooltip(label, owner, key, text) {
+  label.id(`marquee-viewport-${key}`).relative()
+    .on_mouse_move(({ local_position: point }, cx) => {
+      const previous = owner.marqueeHover;
+      if (previous?.key !== key) {
+        const wasVisible = clearMarqueeHover(owner);
+        const hover = { key, point, visible: false };
+        owner.marqueeHover = hover;
+        hover.timer = cx.timer.after(500, (task) => {
+          if (owner.marqueeHover !== hover) return;
+          hover.visible = true;
+          task.notify();
+        });
+        if (wasVisible) cx.notify();
+      } else if (point.x !== previous.point.x || point.y !== previous.point.y) {
+        previous.point = point;
+        if (previous.visible) cx.notify();
+      }
+    })
+    .on_hover((active, cx) => {
+      if (!active && owner.marqueeHover?.key === key && clearMarqueeHover(owner)) cx.notify();
+    });
+
+  const hover = owner.marqueeHover;
+  if (hover?.key === key && hover.visible) {
+    const t = theme();
+    label.child(
+      Popup.new(`marquee-help-${key}`, div().size(1))
+        .absolute().left(hover.point.x).top(hover.point.y)
+        .anchor("top_left")
+        .content(div().pl(16).pt(14).child(
+          div().max_w(440).px(8).py(4).rounded(5).border_1().border_color(t.border)
+            .bg(t.popover).text_color(t.foreground).text_size(12).child(text),
+        )),
+    );
+  }
+  return label;
+}
+
+export function marquee(owner, key, value, { maxWidth, color, size, grow = false, tooltip } = {}) {
   const text = String(value ?? "");
   owner.marqueeWidths ??= Object.create(null);
   let widths = owner.marqueeWidths[key];
@@ -30,13 +79,12 @@ export function marquee(owner, key, value, { maxWidth, color, size, grow = false
   const available = widths.view || maxWidth || content;
   const overflow = Math.max(0, Math.ceil(content - available));
 
-  let outer = div()
+  const label = div()
     .flex()
     .items_center()
     .min_w(0)
     .overflow_hidden()
     .whitespace_nowrap()
-    .when(tooltip, (el) => el.tooltip(text))
     .when(grow, el => el.flex_1())
     .when(!grow, el => el.flex_none())
     .when(maxWidth != null, el => el.max_w(maxWidth))
@@ -50,7 +98,7 @@ export function marquee(owner, key, value, { maxWidth, color, size, grow = false
       }
     });
 
-  return outer.child(
+  label.child(
     div()
       .id(`marquee-${key}`)
       .relative()
@@ -71,4 +119,6 @@ export function marquee(owner, key, value, { maxWidth, color, size, grow = false
       }))
       .child(text),
   );
+
+  return tooltip ? withTooltip(label, owner, key, tooltip) : label;
 }

@@ -31,7 +31,6 @@ export class Footer {
       .cursor_pointer()
       .hover((s) => s.bg(t.hover).text_color(t.foreground))
       .accessibility_label(label)
-      .tooltip(label)
       .on_click(action)
       .children(icons);
   }

@@ -20,7 +20,7 @@ import { PRStatusObserver, prPlaceKey, prAppearance } from "../git/pr-status.js"
 import { spaceFolder, checkoutKey, readCheckout } from "../git/checkouts.js";
 import { loadSettings, duration } from "../settings.js";
 import { findNode } from "./find-node.js";
-import { TEXT, Icon, IconButton, Badge, Rail, PROJECT_PALETTE, projectColor } from "./ui.js";
+import { TEXT, Icon, IconButton, Badge, Rail, PROJECT_PALETTE, directoryTooltip, projectColor } from "./ui.js";
 import { marquee } from "./marquee.js";
 
 const USUAL_BRANCHES = new Set(["main", "master"]);
@@ -318,7 +318,7 @@ export class Spaces {
       Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
     const list = sp
-      .map((w, i) => ({ w, i, g: this.git[checkoutKey(w, ps)] ?? null }))
+      .map((w, i) => ({ w, i, g: this.git[checkoutKey(w, ps)] ?? null, folder: spaceFolder(w, ps) }))
       .filter((r) => this.shown.has(r.w.id));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
     const nested = (r) => r.g?.linked && mains.has(r.g.repo);
@@ -533,7 +533,7 @@ export class Spaces {
       .text_size(TEXT.caption)
       .cursor_pointer()
       .hover((s) => s.bg(t.hover))
-      .tooltip(
+      .accessibility_label(
         `${pr.repository}#${pr.number} · ${status.label}\n${pr.title}\n${url}\n${shortcut}-click to open`,
       )
       .on_mouse_down("left", (event, cx) => {
@@ -566,7 +566,7 @@ export class Spaces {
           .gap(3)
           .items_center()
           .text_color(status.color)
-          .tooltip(`${pr.repository}#${pr.number} · ${status.label}\n${pr.title}`)
+          .accessibility_label(`${pr.repository}#${pr.number} · ${status.label}\n${pr.title}`)
           .child(Icon(`${status.icon}`).size(13).flex_none())
           .when(!compact, (el) => el.child(this.prNumber(w, pr, status))),
       );
@@ -576,7 +576,7 @@ export class Spaces {
         div()
           .text_size(TEXT.caption)
           .text_color(t.dim)
-          .tooltip(
+          .accessibility_label(
             prs
               .slice(1)
               .map((pr) => `${pr.repository}#${pr.number} · ${pr.title}`)
@@ -595,7 +595,7 @@ export class Spaces {
       .h(20)
       .pl(tree ? 44 : 27)
       .items_center()
-      .tooltip(`PR refresh failed: ${status.error}`)
+      .accessibility_label(`PR refresh failed: ${status.error}`)
       .child(
         div()
           .text_size(TEXT.caption)
@@ -605,7 +605,7 @@ export class Spaces {
   }
   // ── Expanded/compact rows and sidebar rendering ──────────────────────────
 
-  row({ w, i, g, tree }, t) {
+  row({ w, i, g, tree, folder }, t) {
     const status = this.checkoutStatus(w);
     const hasPRLine = Boolean(status?.error);
     // One row is lit: under the lists view, the focused agent beneath takes it.
@@ -622,7 +622,7 @@ export class Spaces {
       .when(!lit, (el) => el.hover((s) => s.bg(t.hover)))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
       .on_mouse_down("right", () => this.menu(w))
-      .child(this.rowTitle(w, g, tree, t))
+      .child(this.rowTitle(w, g, tree, folder, t))
       .when(hasPRLine, (el) => el.child(this.prLine(w, t, Boolean(tree))));
     if (this.pressed !== null && this.over === i && this.pressed !== i)
       row.child(this.dropLine(i, t));
@@ -671,7 +671,7 @@ export class Spaces {
       });
   }
 
-  rowTitle(w, g, tree, t) {
+  rowTitle(w, g, tree, folder, t) {
     return h_flex()
       .gap(9)
       .items_center()
@@ -681,7 +681,7 @@ export class Spaces {
         marquee(this, `space-${w.id}`, w.name, {
           maxWidth: 150,
           color: projectColor(w.id, t),
-          tooltip: false,
+          tooltip: directoryTooltip(folder, w.machine),
         }),
       )
       .child(this.branchName(g, w.name, t, w))

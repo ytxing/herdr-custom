@@ -19,8 +19,9 @@ import {
   layout,
 } from "herdr";
 import { findNode } from "./find-node.js";
-import { TEXT, Icon, GroupHeader, Rail, projectColor } from "./ui.js";
-import { marquee } from "./marquee.js";
+import { TEXT, Icon, GroupHeader, Rail, directoryTooltip, projectColor } from "./ui.js";
+import { clearMarqueeHover, marquee } from "./marquee.js";
+import { spaceFolder } from "../git/checkouts.js";
 
 // The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
 const narrow = () => (findNode(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
@@ -251,6 +252,7 @@ export class Agents {
     const st = kidStatus(k, this.listed);
     const pic = icon(k.program, 14, t.foreground);
     const on = k.address === shown;
+    const name = k.name || k.template || k.program?.name;
     return h_flex()
       .id(`sub-${k.address}`)
       .pl(39)
@@ -278,8 +280,9 @@ export class Agents {
         ),
       )
       .when(Boolean(pic), (el) => el.child(div().mr(8).child(pic)))
-      .child(marquee(this, `child-${k.address}`, k.name || k.template || k.program?.name || k.address, {
+      .child(marquee(this, `child-${k.address}`, name || k.address, {
         grow: true,
+        tooltip: name,
         color: on ? t.foreground : t.muted,
       }))
       .child(this.status(t, { status: st, program: k.program, address: k.address }, compact));
@@ -404,7 +407,10 @@ export class Agents {
     const label = agentLabel();
     // Each tab's place in the list and its number within its space.
     const tabOrder = new Map();
+    const spaceFolders = new Map();
+    const paneList = panes();
     for (const space of spaces()) {
+      spaceFolders.set(space.id, spaceFolder(space, paneList));
       space.tabs.forEach((tab, index) =>
         tabOrder.set(tab.id, { order: tabOrder.size, number: index + 1 }),
       );
@@ -440,6 +446,7 @@ export class Agents {
       list,
       label,
       groups,
+      spaceFolders,
     };
   }
 
@@ -545,13 +552,14 @@ export class Agents {
     return `project:${space}`;
   }
 
-  projectHeader({ id, space, name, machine, t, divided = false, secondary = false }) {
+  projectHeader({ id, space, name, folder, machine, t, divided = false, secondary = false }) {
     const fold = this.projectFoldKey(space);
     const color = projectColor(space, t);
     return GroupHeader({
       owner: this,
       id,
       label: name || "Project",
+      labelTooltip: directoryTooltip(folder, machine),
       labelColor: color,
       prominent: true,
       folded: this.folded.has(fold),
@@ -559,7 +567,7 @@ export class Agents {
       // The main axis puts its chevron at the right; a sub-heading leads with it.
       trailing: !secondary,
       action: machine
-        ? div().flex_none().text_color(t.dim).tooltip(`Remote: ${machine}`).child(Icon("server"))
+        ? div().flex_none().text_color(t.dim).accessibility_label(`Remote: ${machine}`).child(Icon("server"))
         : null,
       onClick: (cx) => this.toggleFold(fold, cx),
     });
@@ -602,6 +610,7 @@ export class Agents {
         id: `priority-project-${group.id}-${first.space}`,
         space: first.space,
         name: first.space_name,
+        folder: view.spaceFolders.get(first.space),
         machine,
         t,
         secondary: true,
@@ -629,6 +638,7 @@ export class Agents {
         id: `tab-project-${first.space}`,
         space: first.space,
         name: first.space_name,
+        folder: view.spaceFolders.get(first.space),
         machine,
         t,
         divided: Boolean(previousGroup),
@@ -711,7 +721,7 @@ export class Agents {
       .text_size(TEXT.caption)
       .text_color(t.dim)
       .hover((s) => s.bg(t.raised).text_color(t.foreground))
-      .tooltip("Click to edit")
+      .accessibility_label(`Edit idle threshold: ${this.idleAfter.label}`)
       .on_click((_event, cx) => {
         cx.stop_propagation();
         this.editingIdle = true;
@@ -719,7 +729,7 @@ export class Agents {
         this.idleInput.focus();
         cx.notify();
       })
-      .child(this.idleAfter.label);
+      .child(`>${this.idleAfter.label}`);
   }
 
   agentWithSubs(a, i, view, t) {
@@ -791,18 +801,18 @@ export class Agents {
       .when(Boolean(pic), (el) => el.child(this.agentIcon(a, pic, subs)))
       .child(this.agentName(a, view, t))
       .when(view.nested && Boolean(machine), (el) =>
-        el.child(div().flex_none().text_color(t.dim).tooltip(`Remote: ${machine}`).child(Icon("server"))),
+        el.child(div().flex_none().text_color(t.dim).accessibility_label(`Remote: ${machine}`).child(Icon("server"))),
       )
       .when(subs.length > 0, (el) => el.child(this.foldButton(a, subs, t)))
-      .when(hovered, (el) => el.child(this.pinButton(a, t)))
-      .when(!hovered && Boolean(when), (el) =>
-        el.child(
-          div()
-            .flex_none()
-            .text_size(TEXT.caption)
-            .text_color(t.dim)
-            .child(duration(view.now - when)),
-        ),
+      // Keep the title's width stable when the pin replaces the elapsed time.
+      .child(
+        h_flex().relative().h(17).min_w(17).flex_none().items_center().justify_end()
+          .when(Boolean(when), (el) => el.child(
+            div().text_size(TEXT.caption).text_color(t.dim)
+              .when(hovered, (text) => text.opacity(0))
+              .child(duration(view.now - when)),
+          ))
+          .when(hovered, (el) => el.child(this.pinButton(a, t).absolute().top(0).right(0))),
       )
       .child(this.status(t, a, view.byPriority && !this.pins.includes(a.address)));
   }
@@ -869,6 +879,7 @@ export class Agents {
       .child(
         marquee(this, `agent-${a.address}`, name, {
           grow: true,
+          tooltip: name,
           color: idle ? t.muted : t.foreground,
         }),
       );
@@ -909,12 +920,13 @@ export class Agents {
       .text_color(t.dim)
       .cursor_pointer()
       .hover((s) => s.bg(t.hover).text_color(t.foreground))
-      .tooltip(pinned ? "Unpin" : "Pin to the top")
+      .accessibility_label(pinned ? "Unpin" : "Pin to the top")
       .on_click((_e, cx) => {
         cx.stop_propagation();
         this.setPins(pinned ? this.pins.filter((p) => p !== a.address) : [...this.pins, a.address]);
         // The row moves away from under the pointer, and no hover-out comes.
         this.hovered = null;
+        clearMarqueeHover(this);
         cx.notify();
       })
       .child(Icon(pinned ? "pin-off" : "pin", 13));

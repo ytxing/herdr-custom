@@ -26,6 +26,10 @@ export function projectColor(spaceId, t) {
   return t[color] ?? t.accent;
 }
 
+export function directoryTooltip(folder, machine) {
+  return folder && (machine ? `${machine}:${folder}` : folder);
+}
+
 export const Icon = (name, size = 14) =>
   svg(`mods/better-sidebar/icons/${name}.svg`).size(size).flex_none();
 
@@ -56,7 +60,6 @@ export function IconButton({ id, icon, label, onClick, iconSize = 15, muted = fa
     .text_color(muted ? t.dim : t.foreground)
     .cursor_pointer()
     .accessibility_label(label)
-    .tooltip(label)
     .hover((s) => s.bg(t.hover).text_color(t.foreground))
     .when(Boolean(onClick), (el) =>
       el.on_click((_e, cx) => {
@@ -72,6 +75,7 @@ export function GroupHeader({
   owner,
   id,
   label,
+  labelTooltip,
   number = null,
   numberBreathing = false,
   labelColor,
@@ -110,7 +114,7 @@ export function GroupHeader({
         .text_color(prominent ? t.foreground : t.dim)
         .child(String(number)),
     ))
-    .child(marquee(owner, `group-${id}`, label, { grow: true, size: prominent ? TEXT.body : TEXT.caption, color: labelColor ?? (prominent ? t.foreground : t.muted) })
+    .child(marquee(owner, `group-${id}`, label, { grow: true, size: prominent ? TEXT.body : TEXT.caption, color: labelColor ?? (prominent ? t.foreground : t.muted), tooltip: labelTooltip })
       .when(!prominent, el => el.font_medium()))
     .when(Boolean(action), (el) => el.child(action))
     .when(trailing, (el) => el.child(Icon(folded ? "chevron-right" : "chevron-down", 12).text_color(t.dim)));
