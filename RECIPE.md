@@ -1,8 +1,8 @@
-# Custom
+# Good Agent Info
 
-A compact coding workspace with a combined Spaces/Tabs/Status sidebar, a horizontally scrolling tab bar, and an agent-aware pane header. The sidebar groups work by project and tab, while the right panel can show files or Git changes.
+Good Agent Info is a Herdr layout built around a sidebar with Spaces, Tabs, and Status views. It organizes local and remote agents by workspace, prioritizes agents that need attention, and groups long-idle agents under Dormant. The layout also includes a scrolling tab bar, agent-aware pane headers, and Files and Changes panels.
 
-![Custom](preview.png)
+![Good Agent Info](preview.png)
 
 ## What you see
 
@@ -25,13 +25,22 @@ A compact coding workspace with a combined Spaces/Tabs/Status sidebar, a horizon
 
 ## Built from
 
-- `layouts/Custom.json` defines the sidebar, work area, tab bar, pane header, right panel, status bar, and terminal menu.
+- `layouts/Good Agent Info.json` defines the sidebar, work area, tab bar, pane header, right panel, status bar, and terminal menu.
 - `mods/better-sidebar/` provides the combined workspace and agent lists, Git metadata, and optional GitHub pull-request status.
 - `mods/tabs-marquee/` provides the tab bar and per-space panel selection.
 - `mods/agent-name-pane/` provides the agent-aware pane header.
 - `mods/workspace-chrome/` and `mods/workspace-status/` provide the top and bottom workspace bars.
 - `mods/files/` and `mods/changes/` provide the right-side file browser and Git change view.
 - `mods/my-menu/` provides the terminal context menu and pane-to-tab picker.
+- `mods/agent-ring-toast/` forwards agent alerts to macOS and plays notification sounds.
+
+## Agent Ring alerts
+
+Good Agent Info sends Herdr-managed agents on this computer and on remote machines through Agent Ring's macOS notification and sound pools. Agents running outside Herdr keep using Agent Ring's existing hooks and plugins. In Herdr's Settings > Alerts, configure banners, sound playback, and fixed or per-pane sound selection. The MP3 pools live in `mods/agent-ring-toast/sound-fx/`; the same folder path appears in the settings page.
+
+The mod uses Node.js and macOS audio tools. Install `terminal-notifier` for system banners. If a local Agent Ring Codex sender and Herdr's app icon are available, the installer can create a Herdr-branded sender locally. Add MP3s you can use to `sound-fx/done/` and `sound-fx/suspended/` inside the installed mod. Empty pools use macOS system sounds. Disable Herdr's built-in sounds to avoid duplicate playback.
+
+After installing the mod, run `node mods/agent-ring-toast/install-alerts.cjs` while Herdr is running, then reopen Settings. Herdr regenerates its built-in Settings screen on startup. Run the same command after a restart to restore the controls. The saved preferences are retained.
 
 ## Requirements
 
@@ -42,4 +51,4 @@ A compact coding workspace with a combined Spaces/Tabs/Status sidebar, a horizon
 
 ## Install
 
-Copy `layouts/Custom.json` into `~/.config/herdr-app/layouts/` and each folder under `mods/` into `~/.config/herdr-app/mods/`. Run `herdr-app check ~/.config/herdr-app/mods/better-sidebar`, `herdr-app check ~/.config/herdr-app/mods/tabs-marquee`, and `herdr-app check ~/.config/herdr-app/mods/agent-name-pane`, then switch to the Custom layout from the layout picker.
+Copy `layouts/Good Agent Info.json` into `~/.config/herdr-app/layouts/` and each folder under `mods/` into `~/.config/herdr-app/mods/`. Check each mod with `herdr-app check <mod-folder>`, then choose Good Agent Info in the layout picker.

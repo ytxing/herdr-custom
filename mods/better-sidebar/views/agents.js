@@ -3,7 +3,7 @@
 // A viewed done agent stays in Done until left.
 
 import { div, image, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { v_flex, h_flex, Input, InputState } from "gpui-base";
 import {
   agents,
   terminals,
@@ -60,7 +60,16 @@ function title(tab, l) {
   return (tab.name === prog || !tab.named) && telling ? live : base;
 }
 // Agent marks take the agent's own color from its icon; other programs keep the theme's.
-const AGENT_COLORS = { claude: "#D97757", codex: "#7A9DFF" };
+// The four stay apart by hue and by lightness, so a 7 px dot still tells them apart:
+// orange 19°, gold 40° (much lighter), mint 160°, periwinkle 224°. Pi's logo carries
+// coral, blue and gold; gold keeps clear of Claude's coral. OpenCode's mark is
+// monochrome, so it takes the free cool hue instead of a shade that would read as idle.
+const AGENT_COLORS = {
+  claude: "#D97757",
+  codex: "#7A9DFF",
+  pi: "#F1BE58",
+  opencode: "#4FC3A1",
+};
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
@@ -73,8 +82,20 @@ const SORTS = [
   { id: "tab", label: "Grouped by tab", icon: "layers" },
 ];
 const sortOf = (id) => SORTS.find((s) => s.id === id) ?? SORTS[0];
-const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", 1: "Idle" };
+const LONG_IDLE = "sec-0";
+const IDLE_UNITS = { m: 60000, h: 3600000, d: 86400000 };
+const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", 1: "Idle", 0: "Dormant" };
 const SECTION_STATUS = { 4: "blocked", 3: "done", 2: "working" };
+
+function idleThreshold(value) {
+  const match = /^(\d+(?:\.\d+)?)\s*([mhd])$/i.exec(value.trim());
+  if (!match) return null;
+  const unit = match[2].toLowerCase();
+  const ms = Number(match[1]) * IDLE_UNITS[unit];
+  return Number.isFinite(ms) && ms > 0 ? { ms, label: match[1] + unit } : null;
+}
+
+const DEFAULT_IDLE_AFTER = idleThreshold("1d");
 
 function grouping(sort, tabName) {
   return sort === "tab"
@@ -124,7 +145,23 @@ function agentLabel() {
 // Same group next to each other, so the list reads, and next-agent keys move, in order.
 export class Agents {
   init(_props, cx) {
-    this.folded = new Set();
+    this.folded = new Set([LONG_IDLE]);
+    this.idleAfter = idleThreshold(localStorage.getItem("idleAfter") ?? "") ?? DEFAULT_IDLE_AFTER;
+    this.idleInput = InputState.new({ placeholder: "e.g. 12h/1d" });
+    this.idleInput.on("change", (_event, cx) => cx.notify());
+    const finishIdleEdit = (_event, cx) => {
+      if (!this.editingIdle) return;
+      this.editingIdle = false;
+      const value = this.idleInput.value().trim();
+      const threshold = value ? idleThreshold(value) : DEFAULT_IDLE_AFTER;
+      if (threshold) {
+        this.idleAfter = threshold;
+        localStorage.setItem("idleAfter", threshold.label);
+      }
+      cx.notify();
+    };
+    this.idleInput.on("submit", finishIdleEdit);
+    this.idleInput.on("blur", finishIdleEdit);
     // Each agent's last state and when it changed (ms), kept across restarts.
     this.changed = JSON.parse(localStorage.getItem("changed") ?? "{}");
     this.pins = JSON.parse(localStorage.getItem("pins") ?? "[]");
@@ -364,7 +401,7 @@ export class Agents {
     const rest = groupOf
       ? gatherGroups(gatherGroups(unpinned, (a) => ({ id: a.space })), groupOf)
       : unpinned;
-    const groups = this.makeGroups(pinned, rest, groupOf, byPriority, urgency);
+    const groups = this.makeGroups(pinned, rest, groupOf, byPriority, urgency, now);
     if (sort.id === "tab") {
       const orderOf = (group) => tabOrder.get(group.members[0]?.tab)?.order ?? Infinity;
       const pinnedRank = (group) => (group.id === "pinned" ? 0 : 1);
@@ -377,13 +414,16 @@ export class Agents {
         if (group.id !== "pinned") group.members = gatherGroups(group.members, (a) => ({ id: a.space }));
       }
     }
-    const list = groups.flatMap((group) => group.members);
+    const collapsed = narrow();
+    const list = groups.flatMap((group) =>
+      collapsed && group.id === LONG_IDLE && this.folded.has(LONG_IDLE) ? [] : group.members,
+    );
     return {
       sort,
       all,
       now,
       byPriority,
-      collapsed: narrow(),
+      collapsed,
       shown: focused()?.agent,
       list,
       label,
@@ -407,7 +447,7 @@ export class Agents {
 
   // Groups in list order: spaces (grouped) or priority sections. Agents of a
   // space are next to each other in agents(), so neighbours make a group.
-  makeGroups(pinned, rest, groupOf, byPriority, urgency) {
+  makeGroups(pinned, rest, groupOf, byPriority, urgency, now) {
     const groups = pinned.length
       ? [{ id: "pinned", label: "Pinned", status: null, members: pinned }]
       : [];
@@ -415,11 +455,14 @@ export class Agents {
       // Every section stays, empty ones at zero: a status vanishing reads as a glitch.
       const byRank = new Map();
       for (const a of rest) {
-        const rank = urgency.get(a.address) || RANK.idle;
+        const urgencyRank = urgency.get(a.address) || RANK.idle;
+        const longIdle = a.status === "idle" && urgencyRank === RANK.idle &&
+          now - this.since(a) >= this.idleAfter.ms;
+        const rank = longIdle ? 0 : urgencyRank;
         if (!byRank.has(rank)) byRank.set(rank, []);
         byRank.get(rank).push(a);
       }
-      for (const rank of [4, 3, 2, 1]) {
+      for (const rank of [4, 3, 2, 1, 0]) {
         groups.push({
           id: `sec-${rank}`,
           label: SECTION[rank],
@@ -599,11 +642,14 @@ export class Agents {
       null,
     );
     const showTop = folded && !view.byPriority && top && top !== "idle";
-    const action = showTop ? this.status(t, { status: top }, true) : null;
+    const action = group.id === LONG_IDLE
+      ? this.idleThresholdControl(t)
+      : showTop ? this.status(t, { status: top }, true) : null;
     const onClick = (cx) => this.toggleFold(group.id, cx);
     const isTab = view.sort.id === "tab" && group.id !== "pinned";
     // Status sections read like project headings: big colored text, right chevron.
     const isSection = view.byPriority && Boolean(group.status);
+    const statusColor = group.id === LONG_IDLE ? t.dim : t[group.status] ?? t.muted;
     return GroupHeader({
       owner: this,
       id: group.id,
@@ -614,7 +660,7 @@ export class Agents {
       numberBreathing: isTab && top === "working",
       // An empty section stays listed, dimmed.
       labelColor: isSection
-        ? group.members.length ? t[group.status] ?? t.muted : t.dim
+        ? group.members.length ? statusColor : t.dim
         : t[group.status],
       prominent: isTab || isSection,
       trailing: isSection,
@@ -623,6 +669,45 @@ export class Agents {
       action,
       onClick,
     });
+  }
+
+  idleThresholdControl(t) {
+    if (this.editingIdle) {
+      return div()
+        .id("long-idle-input")
+        .w(84)
+        .flex_none()
+        .px(5)
+        .rounded(4)
+        .bg(t.raised)
+        .on_click((_event, cx) => cx.stop_propagation())
+        .on_key_down((event, cx) => {
+          if (event.key !== "escape") return;
+          cx.stop_propagation();
+          this.editingIdle = false;
+          cx.notify();
+        })
+        .child(Input.new(this.idleInput)
+          .text_size(TEXT.caption)
+          .text_color(this.idleInput.value() ? t.foreground : t.dim));
+    }
+    return div()
+      .id("long-idle-threshold")
+      .flex_none()
+      .px(5)
+      .rounded(4)
+      .text_size(TEXT.caption)
+      .text_color(t.dim)
+      .hover((s) => s.bg(t.raised).text_color(t.foreground))
+      .tooltip("Click to edit")
+      .on_click((_event, cx) => {
+        cx.stop_propagation();
+        this.editingIdle = true;
+        this.idleInput.set_value("");
+        this.idleInput.focus();
+        cx.notify();
+      })
+      .child(this.idleAfter.label);
   }
 
   agentWithSubs(a, i, view, t) {
