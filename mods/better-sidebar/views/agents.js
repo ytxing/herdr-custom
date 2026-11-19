@@ -39,6 +39,15 @@ function toggleSidebar() {
 
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").replace(/^\[ [!.] \] /, "").trim();
 
+// pi titles its terminal "π - <session> - <folder>" ("π - <folder>" until the
+// session has a name). The glyph and the trailing folder repeat what the label
+// already says, so keep only the session.
+function shownTitle(program, raw) {
+  const title = clean(raw);
+  if (program?.key !== "pi" || !title.startsWith("π")) return title;
+  return title.replace(/^π\s+-\s+/u, "").replace(/\s+-\s+\S+$/u, "");
+}
+
 function lead(tab, all = panes()) {
   const mine = all.filter((p) => p.tab === tab.id && p.terminal);
   return mine.find((p) => p.program?.agent) ?? mine.find((p) => p.focused) ?? mine[0];
@@ -50,7 +59,7 @@ function title(tab, l) {
   const prog = l?.program?.name;
   const base = tab.named ? tab.name : prog ?? "Terminal";
   if (!l?.program?.agent) return base;
-  const live = clean(l?.title);
+  const live = shownTitle(l?.program, l?.title);
   // clean() would strip a path's leading ~ or /: test the title with only its status glyph gone.
   const path = /^[~/]|^[A-Za-z]:\\/.test((l?.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, ""));
   // Only a shell's "user@host: path" goes without saying; an agent's own
@@ -138,7 +147,7 @@ function agentLabel() {
   const tabs = spaces().flatMap((s) => s.tabs);
   return (a) => {
     const tab = tabs.find((candidate) => candidate.id === a.tab);
-    return tab ? title(tab, lead(tab)) : clean(a.title) || a.program?.name || "";
+    return tab ? title(tab, lead(tab)) : shownTitle(a.program, a.title) || a.program?.name || "";
   };
 }
 
@@ -841,7 +850,7 @@ export class Agents {
 
   // The tab's title, then quietly its space; nested under its space's row, its program.
   agentName(a, view, t) {
-    const name = clean(a.title) || a.program?.name || "";
+    const name = shownTitle(a.program, a.title) || a.program?.name || "";
     const idle = a.status === "idle" && !a.focused;
     return h_flex()
       .flex_1()

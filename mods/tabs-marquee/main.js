@@ -14,6 +14,15 @@ function find(node, id) {
 // Same as the agents mod: drops a status glyph, keeps a leading bracket or quote.
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").replace(/^\[ [!.] \] /, "").trim();
 
+// pi titles its terminal "π - <session> - <folder>" ("π - <folder>" until the
+// session has a name). The glyph and the trailing folder repeat what the label
+// already says, so keep only the session.
+function shownTitle(program, raw) {
+  const title = clean(raw);
+  if (program?.key !== "pi" || !title.startsWith("π")) return title;
+  return title.replace(/^π\s+-\s+/u, "").replace(/\s+-\s+\S+$/u, "");
+}
+
 // Marquee pacing: slow enough to read a long tab name. The period covers
 // there and back; linear avoids a fast surge through the middle.
 const MARQUEE_MIN_MS = 6000;
@@ -49,7 +58,7 @@ function label(tab, lead) {
   const prog = lead?.program?.name;
   const base = tab.named ? tab.name : prog ?? "Terminal";
   if (!lead?.program?.agent) return base;
-  const live = clean(lead.title);
+  const live = shownTitle(lead.program, lead.title);
   // clean() would strip a path's leading ~ or /: test the title with only its status glyph gone.
   const path = /^[~/]|^[A-Za-z]:\\/.test((lead.title ?? "").replace(/^[^\p{L}\p{N}~/]+/u, ""));
   // Only a shell's "user@host: path" goes without saying; an agent's own
