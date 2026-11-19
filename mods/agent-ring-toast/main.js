@@ -154,7 +154,9 @@ async function forward(notification) {
   if (!kind) return;
 
   const config = shared("agent-ring.alerts") ?? {};
-  const focus = `${quote(`${home()}/.local/bin/herdr-app`)} do agent.focus --terminal ${quote(address)}`;
+  const app = quote(`${home()}/.local/bin/herdr-app`);
+  const acknowledge = `${app} do ${quote(`workspace-chrome.ring-read/${address}`)}`;
+  const focus = `${acknowledge}; ${app} do agent.focus --terminal ${quote(address)}`;
   const terminal = terminals().find(entry => entry.address === address);
   const sessionTitle = [terminal?.report?.title, terminal?.title]
     .find(title => typeof title === "string" && title.trim());

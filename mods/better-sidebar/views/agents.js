@@ -386,10 +386,13 @@ export class Agents {
     const sort = sortOf(sortId);
     const all = terminals();
     const now = Date.now();
-    const unordered = agents();
+    const unread = shared("agent-ring.unreadDone");
+    const native = agents();
+    const unordered = native.map(agent =>
+      agent.status === "idle" && unread?.[agent.address] ? { ...agent, status: "done" } : agent);
     this.listed = new Map(unordered.map((a) => [a.address, a.status]));
     this.track(unordered, now);
-    this.hold(unordered);
+    this.hold(native);
     this.prunePins(all);
 
     const byPriority = sort.id === "priority";
@@ -736,7 +739,10 @@ export class Agents {
       .items_center()
       .gap(4)
       .hover((s) => s.bg(t.hover))
-      .on_click(() => run("pane.focus", { pane: a.pane }))
+      .on_click(() => {
+        if (shared("agent-ring.unreadDone")?.[a.address]) run(`workspace-chrome.ring-read/${a.address}`);
+        run("pane.focus", { pane: a.pane });
+      })
       .child(
         div()
           .flex_1()
@@ -778,7 +784,10 @@ export class Agents {
         else if (hovered) this.hovered = null;
         cx.notify();
       })
-      .on_click(() => run("pane.focus", { pane: a.pane }))
+      .on_click(() => {
+        if (shared("agent-ring.unreadDone")?.[a.address]) run(`workspace-chrome.ring-read/${a.address}`);
+        run("pane.focus", { pane: a.pane });
+      })
       .when(Boolean(pic), (el) => el.child(this.agentIcon(a, pic, subs)))
       .child(this.agentName(a, view, t))
       .when(view.nested && Boolean(machine), (el) =>

@@ -4,7 +4,7 @@
 
 import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { props, closeOverlay, run, theme } from "herdr";
+import { props, closeOverlay, run, shared, theme } from "herdr";
 
 const DOT = { error: "blocked", warning: "working", success: "done", info: "accent" };
 
@@ -24,6 +24,10 @@ export default class Toast extends View {
       .cursor_pointer()
       .hover((s) => s.bg(t.hover))
       .on_click(() => {
+        const address = p.action?.args?.terminal;
+        if (p.action?.name === "agent.focus" && shared("agent-ring.unreadDone")?.[address]) {
+          run(`workspace-chrome.ring-read/${address}`);
+        }
         if (p.action?.name) run(p.action.name, p.action.args ?? {});
         closeOverlay(p.overlay);
       })

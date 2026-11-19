@@ -1,6 +1,6 @@
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, run, props, window, shared, setShared, updates, layout } from "herdr";
+import { checking, focused, layout, machines, nextCommand, notify, panes, props, run, setShared, shared, terminals, theme, updates, window } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -23,13 +23,98 @@ function toggleSidebar() {
   run("layout.resize", { id: "sidebar", px: narrow() ? (shared("sidebar.width") ?? 268) : window()?.platform === "macos" ? 76 : 44 });
 }
 
+const RING_READ = /^ring-read\/((?:[a-z0-9][a-z0-9_.-]*\/)?t[a-z0-9]+)$/;
+
 export default class WorkspaceChrome extends View {
+  init(config, cx) {
+    if (config?.footer || checking()) return;
+    cx.spawn(async () => {
+      for (;;) {
+        const acknowledge = RING_READ.exec(await nextCommand());
+        if (acknowledge) this.acknowledgeDone(acknowledge[1]);
+      }
+    });
+  }
+
+  observeVisibleAgents(cx) {
+    if (layout()?.toast !== "agent-ring-toast") {
+      this.previousView = undefined;
+      return;
+    }
+
+    const focus = focused();
+    const address = focus?.shown ?? focus?.terminal;
+    const active = window()?.active;
+    const previous = this.previousView;
+    const all = new Map(terminals().map(term => [term.address, term]));
+    const allPanes = panes();
+    const visible = new Set(allPanes.filter(pane => pane.tab === focus?.tab).map(pane => pane.terminal));
+    if (address) visible.add(address);
+
+    const reports = new Map();
+    const alerts = [];
+    for (const id of visible) {
+      const terminal = all.get(id);
+      if (!terminal?.report) continue;
+      const { turn, report: { state } } = terminal;
+      const before = active && previous?.active && previous.reports.get(id);
+      reports.set(id, { turn, state });
+      if (!before) continue;
+      // The Core turn also advances on a direct Working → Idle report.
+      const completed = (state === "done" || state === "idle") && turn > before.turn;
+      const needsUser = id === address && (state === "blocked" || state === "error") && state !== before.state;
+      if (completed || needsUser) alerts.push({ terminal, completed, focused: id === address });
+    }
+    this.previousView = { address, pane: focus?.pane, active, reports };
+
+    const unread = shared("agent-ring.unreadDone") ?? {};
+    const toClear = new Set();
+    const readyMachines = new Set(machines().filter(machine => machine.layout === "ready").map(machine => machine.name));
+    for (const id of Object.keys(unread)) {
+      const terminal = all.get(id);
+      const machine = id.includes("/") ? id.split("/")[0] : null;
+      if (terminal ? terminal.state !== "live" || terminal.report?.state === "working" : readyMachines.has(machine)) {
+        toClear.add(id);
+      }
+    }
+    // Closing a pane can move focus without an explicit refocus.
+    if (unread[address] && active && previous && previous.address !== address &&
+        (!previous.pane || allPanes.some(pane => pane.pane === previous.pane))) toClear.add(address);
+
+    if (toClear.size || alerts.length) cx.spawn(() => {
+      const next = { ...shared("agent-ring.unreadDone") };
+      for (const id of toClear) delete next[id];
+      for (const { terminal, completed } of alerts) if (completed) next[terminal.address] = true;
+      if (toClear.size || alerts.some(alert => alert.completed)) setShared("agent-ring.unreadDone", next);
+      for (const alert of alerts) this.notifyAgent(alert);
+    });
+  }
+
+  notifyAgent({ terminal, completed: finished, focused }) {
+    if (focused && shared("agent-ring.alerts")?.focusedPane !== true) return;
+    const name = terminal.program?.name || terminal.report?.app || "Agent";
+    notify({
+      title: name + (finished ? " finished" : " needs you"),
+      body: terminal.labels?.where ?? terminal.where,
+      level: finished ? "info" : "error",
+      action: { name: "agent.focus", args: { terminal: terminal.address } },
+    });
+  }
+
+  acknowledgeDone(address) {
+    const unread = shared("agent-ring.unreadDone");
+    if (!unread?.[address]) return;
+    const next = { ...unread };
+    delete next[address];
+    setShared("agent-ring.unreadDone", next);
+  }
+
   button(id, label, action) {
     const t = theme();
     return div().id(id).size(26).flex_none().flex().items_center().justify_center().rounded(6).text_color(t.muted).hover(s => s.bg(t.hover).text_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click(action).child(label);
   }
-  render() {
+  render(cx) {
     const t = theme();
     const collapsed = narrow();
     if (props()?.footer) {
@@ -45,6 +130,7 @@ export default class WorkspaceChrome extends View {
           .when(Boolean(updates().app.ready), el => el.child(collapsed ? ready.absolute().top(5).right(6) : ready)))
         .child(row("machine", "plus", "Add machine", true, () => run("mod.open", { name: "machine-add" })));
     }
+    if (!checking()) this.observeVisibleAgents(cx);
     return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(13.5)
       .when(window()?.platform === "macos" && !window()?.fullscreen && !collapsed, el => el.pl(76))
       .when(!collapsed, el => el.child(h_flex().flex_1().gap(8).items_center().child(image("frame/welcome/herdr.png").size(20).rounded(5)).child(div().font_semibold().text_color(t.foreground).child("Herdr"))))

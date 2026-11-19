@@ -18,6 +18,8 @@
     return v_flex().w_full()
       .child(this.heading(t, "Agent Ring"))
       .child(toggle("banner", "macOS banners"))
+      .child(this.row(t, "Notify for the focused pane", "Also alert when the agent you are watching finishes or needs you.",
+        this.toggle(t, "ring-focused-pane", prefs.focusedPane === true, () => set("focusedPane", prefs.focusedPane !== true))))
       .child(toggle("sound", "Play agent sounds"))
       .child(this.row(t, "Sound selection", "Random assigns a sound to each agent pane.",
         this.button(t, "ring-mode", fixed ? "Fixed" : "Random per agent", () => set("mode", fixed ? "random" : "fixed"))))

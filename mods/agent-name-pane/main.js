@@ -6,7 +6,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, terminals, props, run, theme, home, layout } from "herdr";
+import { panes, terminals, props, run, theme, home, layout, shared } from "herdr";
 
 // Match the first visible tab frame, including the active child of a stack.
 function paneFrame(node) {
@@ -71,7 +71,7 @@ export default class Pane extends View {
     if (!p) return div();
     const name = label(p);
     const pic = icon(p.program, 14, t.dim);
-    const st = p.status;
+    const st = p.status === "idle" && shared("agent-ring.unreadDone")?.[p.terminal] ? "done" : p.status;
     const pane = p.pane;
     const bottom = paneFrame(layout())?.header?.position === "bottom";
     return h_flex()
@@ -86,7 +86,10 @@ export default class Pane extends View {
       .border_color(t.border)
       .text_size(12)
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })
-      .on_click(() => run("pane.focus", { pane }))
+      .on_click(() => {
+        if (shared("agent-ring.unreadDone")?.[p.terminal]) run(`workspace-chrome.ring-read/${p.terminal}`);
+        run("pane.focus", { pane });
+      })
       .when(Boolean(pic), (el) => el.child(pic))
       .child(
         h_flex()
