@@ -6,7 +6,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { panes, terminals, props, run, theme, home, layout, shared } from "herdr";
+import { focused, panes, terminals, props, run, theme, home, layout, shared } from "herdr";
 
 // Match the first visible tab frame, including the active child of a stack.
 function paneFrame(node) {
@@ -71,7 +71,8 @@ export default class Pane extends View {
     if (!p) return div();
     const name = label(p);
     const pic = icon(p.program, 14, t.dim);
-    const st = p.status === "idle" && shared("agent-ring.unreadDone")?.[p.terminal] ? "done" : p.status;
+    const unread = shared("agent-ring.unreadDone")?.[p.terminal];
+    const st = p.status === "idle" && unread ? "done" : p.status;
     const pane = p.pane;
     const bottom = paneFrame(layout())?.header?.position === "bottom";
     return h_flex()
@@ -86,6 +87,19 @@ export default class Pane extends View {
       .border_color(t.border)
       .text_size(12)
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })
+      .when(p.focused && Boolean(unread), el => el.on_mouse_down_out((event, cx) => {
+        const { button, local_position: point, bounds } = event;
+        if (button !== "left" || !point || !bounds || point.x < 0 || point.x >= bounds.width) return;
+        if (bottom ? point.y >= 0 : point.y < bounds.height) return;
+        // The native terminal handles the press first, including any focus change.
+        cx.timer.after(0, () => {
+          const focus = focused();
+          if (focus?.pane === pane && (focus.shown ?? focus.terminal) === p.terminal &&
+              shared("agent-ring.unreadDone")?.[p.terminal]) {
+            run(`workspace-chrome.ring-read/${p.terminal}`);
+          }
+        });
+      }))
       .on_click(() => {
         if (shared("agent-ring.unreadDone")?.[p.terminal]) run(`workspace-chrome.ring-read/${p.terminal}`);
         run("pane.focus", { pane });

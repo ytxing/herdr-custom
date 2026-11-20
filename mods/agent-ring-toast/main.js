@@ -1,5 +1,5 @@
 import { appHome, checking, exec, hc, home, props, shared, terminals, window } from "herdr";
-import Toast from "./toast.js";
+import Toast, { attentionMessage } from "./toast.js";
 
 const TERMINAL = /^(?:[a-z0-9][a-z0-9_.-]*\/)?t[a-z0-9]+$/;
 const quote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
@@ -93,21 +93,6 @@ async function lastInput(address) {
   } catch {
     return "";
   }
-}
-
-function attentionMessage(terminal, state) {
-  const reports = [terminal?.report, ...Object.values(terminal?.records ?? {})];
-  for (const report of reports) {
-    if (report?.state !== state || typeof report.msg !== "string") continue;
-    const firstLine = report.msg.split(/\r?\n/).map(line => line.trim()).find(Boolean);
-    if (firstLine) return firstLine;
-  }
-  if (state === "error") return "";
-  const kind = reports.find(report => report?.state === "blocked" && report.kind)?.kind;
-  if (kind === "permission") return "Approval required";
-  if (kind === "auth") return "Sign-in required";
-  if (kind === "question") return "Waiting for your answer";
-  return "";
 }
 
 async function notificationBody(address, terminal, kind, failed) {
