@@ -790,8 +790,8 @@ export class Agents {
       .cursor_pointer()
       .hover((s) => s.bg(t.hover))
       .on_hover((on, cx) => {
-        if (on) this.hovered = a.address;
-        else if (hovered) this.hovered = null;
+        if (on === (this.hovered === a.address)) return;
+        this.hovered = on ? a.address : null;
         cx.notify();
       })
       .on_click(() => {

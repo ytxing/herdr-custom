@@ -56,12 +56,14 @@ export default class WorkspaceChrome extends View {
     for (const id of visible) {
       const terminal = all.get(id);
       if (!terminal?.report) continue;
-      const { turn, report: { state } } = terminal;
+      const { turn, report: { app, state } } = terminal;
       const before = active && previous?.active && previous.reports.get(id);
       reports.set(id, { turn, state });
       if (!before) continue;
       // The Core turn also advances on a direct Working → Idle report.
-      const completed = (state === "done" || state === "idle") && turn > before.turn;
+      // Codex startup advances its first turn to Idle before receiving a prompt.
+      const codexStartup = app === "codex" && turn === 1 && state === "idle";
+      const completed = !codexStartup && (state === "done" || state === "idle") && turn > before.turn;
       const needsUser = id === address && (state === "blocked" || state === "error") && state !== before.state;
       if (completed || needsUser) alerts.push({ terminal, completed, focused: id === address });
     }

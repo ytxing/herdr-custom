@@ -35,7 +35,7 @@ function withTooltip(label, owner, key, text) {
       const previous = owner.marqueeHover;
       if (previous?.key !== key) {
         const wasVisible = clearMarqueeHover(owner);
-        const hover = { key, point, visible: false };
+        const hover = { key, x: point.x, visible: false };
         owner.marqueeHover = hover;
         hover.timer = cx.timer.after(500, (task) => {
           if (owner.marqueeHover !== hover) return;
@@ -43,9 +43,8 @@ function withTooltip(label, owner, key, text) {
           task.notify();
         });
         if (wasVisible) cx.notify();
-      } else if (point.x !== previous.point.x || point.y !== previous.point.y) {
-        previous.point = point;
-        if (previous.visible) cx.notify();
+      } else if (!previous.visible) {
+        previous.x = point.x;
       }
     })
     .on_hover((active, cx) => {
@@ -57,12 +56,12 @@ function withTooltip(label, owner, key, text) {
     const t = theme();
     label.child(
       Popup.new(`marquee-help-${key}`, div().size(1))
-        .absolute().left(hover.point.x).top(hover.point.y)
+        .absolute().left(hover.x).bottom(-9)
         .anchor("top_left")
-        .content(div().pl(16).pt(14).child(
-          div().max_w(440).px(8).py(4).rounded(5).border_1().border_color(t.border)
+        .content(
+          div().max_w(440).whitespace_normal().px(8).py(4).rounded(5).border_1().border_color(t.border)
             .bg(t.popover).text_color(t.foreground).text_size(12).child(text),
-        )),
+        ),
     );
   }
   return label;
