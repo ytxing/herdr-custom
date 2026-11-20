@@ -41,20 +41,13 @@ function agentNotice(notification) {
 
 function noticeText(notice, t) {
   const context = notice.session || notice.place;
-  return v_flex().flex_1().min_w(0).overflow_hidden()
-    .child(h_flex().gap(5).items_center().min_w(0)
-      .child(div().min_w(0).truncate().font_semibold().text_size(13).line_height(16).text_color(t.foreground).child(notice.heading))
-      .when(Boolean(notice.machine), el => el.child(
-        div().max_w(128).flex_none().truncate().text_size(12).line_height(16).text_color(t.muted).child(`@${notice.machine}`),
-      )))
-    .when(Boolean(context), el => el.child(h_flex().gap(5).min_w(0).items_center()
-      .child(div().min_w(0).truncate().text_size(12).line_height(15).text_color(t.foreground).child(context))
-      .when(Boolean(notice.session && notice.place), row => row.child(
-        div().max_w(112).min_w(0).truncate().text_size(12).line_height(15).text_color(t.muted).child(`· ${notice.place}`),
-      ))))
-    .when(Boolean(notice.reason), el => el.child(
-      div().truncate().text_size(12).line_height(15).text_color(t.muted).child(notice.reason),
-    ));
+  return v_flex().flex_1().min_w(0).overflow_hidden().children([
+    h_flex().gap(5).items_center().min_w(0)
+      .child(div().truncate().font_semibold().text_size(13).text_color(t.foreground).child(notice.heading))
+      .when(Boolean(notice.machine), el => el.child(div().truncate().text_size(12).text_color(t.muted).child(`@${notice.machine}`))),
+    context ? div().truncate().text_size(12).text_color(t.foreground).child(context) : null,
+    notice.reason ? div().truncate().text_size(12).text_color(t.muted).child(notice.reason) : null,
+  ].filter(Boolean));
 }
 
 export default class Toast extends View {
