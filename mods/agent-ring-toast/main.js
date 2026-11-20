@@ -149,7 +149,7 @@ async function forward(notification) {
   const machine = address.includes("/") ? address.split("/")[0] : null;
   const failed = kind === "suspended" && terminal?.report?.state === "error";
   const heading = failed ? notification.title.replace(/ needs you$/, " failed") : notification.title;
-  const title = machine ? `${heading} @${machine}` : heading;
+  const title = (machine ? `${heading} @${machine}` : heading) || (kind === "done" ? "Agent finished" : "Agent needs your attention");
   const subtitle = sessionTitle?.replace(/\s+/g, " ").trim();
   const args = ["-title", title,
     "-group", `herdr-agent-ring/${address}`, "-activate", "dev.herdr.app", "-execute", focus];
@@ -163,7 +163,8 @@ async function forward(notification) {
         notificationBody(address, terminal, kind, failed),
         agentImage(terminal, notification.title),
       ]);
-      const bannerArgs = [...args, "-message", body || (kind === "done" ? "Finished" : failed ? "Agent reported an error" : "Needs your attention")];
+      const message = body || (kind === "done" ? "Finished" : failed ? "Agent reported an error" : "Needs your attention");
+      const bannerArgs = ["-message", message, ...args];
       const withImage = image ? [...bannerArgs, "-contentImage", `file://${encodeURI(image).replace(/#/g, "%23").replace(/\?/g, "%3F")}`] : bannerArgs;
       try {
         if ((await exec(notifier, withImage)).code === 0) return;
