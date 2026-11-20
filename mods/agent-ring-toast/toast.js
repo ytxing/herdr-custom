@@ -33,7 +33,7 @@ function agentNotice(notification) {
 
   const machine = address.includes("/") ? address.split("/")[0] : null;
   const lines = String(notification.body ?? "").split(/\r?\n/);
-  const context = clean(lines.shift()).split(" · ").filter(Boolean);
+  const context = [clean(lines.shift()), clean(lines.shift())].filter(Boolean);
   const session = context[0] || "";
   const place = context.slice(1).join(" · ");
   return { heading: notification.title, machine, session, place, reason: clean(lines.join(" ")) };

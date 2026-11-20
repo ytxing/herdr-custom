@@ -96,11 +96,11 @@ export default class WorkspaceChrome extends View {
     if (focused && shared("agent-ring.alerts")?.focusedPane !== true) return;
     const name = terminal.program?.name || terminal.report?.app || "Agent";
     const session = terminal.report?.title || terminal.title || "";
-    const place = terminal.labels?.where ?? terminal.where ?? "";
+    const place = (terminal.labels?.where ?? terminal.where ?? "").replace(/\s*\/\s*\d+$/, "");
     const reason = finished ? "" : terminal.report?.msg?.split(/\r?\n/).map(line => line.trim()).find(Boolean) || "Needs your attention";
     notify({
       title: name + (finished ? " finished" : " needs you"),
-      body: [session, place].filter(Boolean).join(" · ") + (reason ? `\n${reason}` : ""),
+      body: [session, place].filter(Boolean).join("\n") + (reason ? `\n${reason}` : ""),
       level: finished ? "info" : "error",
       action: { name: "agent.focus", args: { terminal: terminal.address } },
     });
