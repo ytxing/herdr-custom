@@ -2,9 +2,9 @@
 // level, icon, action }); replace this mod to restyle them all. Click to
 // run its action (e.g. go to the agent) and dismiss it.
 
-import { View, div, image, svg } from "gpui-kit";
+import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { agents, closeOverlay, props, run, shared, terminals, theme } from "herdr";
+import { closeOverlay, props, run, shared, theme } from "herdr";
 
 const DOT = { error: "blocked", warning: "working", success: "done", info: "accent" };
 
@@ -31,19 +31,12 @@ function agentNotice(notification) {
   if (notification.action?.name !== "agent.focus" || typeof address !== "string" ||
       (!finished && !notification.title?.endsWith(" needs you"))) return null;
 
-  const terminal = terminals().find(entry => entry.address === address);
-  const agent = agents().find(entry => entry.address === address);
-  const program = terminal?.program ?? agent?.program;
   const machine = address.includes("/") ? address.split("/")[0] : null;
-  const failed = !finished && terminal?.report?.state === "error";
-  const heading = failed ? notification.title.replace(/ needs you$/, " failed") : notification.title;
-  const place = clean(agent?.space_name) || clean(notification.body);
-  const tab = clean(agent?.tab_name);
-  const session = [terminal?.report?.title, terminal?.title, /^\d+$/.test(tab) ? "" : tab]
-    .map(clean).find(value => value && value !== program?.name);
-  const reason = finished ? "" : attentionMessage(terminal, failed ? "error" : "blocked") ||
-    (failed ? "Agent reported an error" : "");
-  return { heading, machine, program, session, place: place === session ? "" : place, reason };
+  const lines = String(notification.body ?? "").split(/\r?\n/);
+  const context = clean(lines.shift()).split(" · ").filter(Boolean);
+  const session = context[0] || "";
+  const place = context.slice(1).join(" · ");
+  return { heading: notification.title, machine, session, place, reason: clean(lines.join(" ")) };
 }
 
 function noticeText(notice, t) {
@@ -71,10 +64,7 @@ export default class Toast extends View {
     const login = /^([a-z0-9][a-z0-9_.-]{0,31}) needs login; run hc machine login \1$/.exec(p.body ?? "");
     const command = login ? `hc machine login ${login[1]}` : null;
     const notice = login ? null : agentNotice(p);
-    const icon = p.icon ?? notice?.program?.icon;
-    const glyph = icon && (!p.icon && notice?.program?.tint
-      ? svg(icon).size(18).text_color(t.foreground).flex_none()
-      : image(icon).w(18).h(18).flex_none());
+    const glyph = p.icon ? image(p.icon).w(18).h(18).flex_none() : div().size(8).rounded(4).flex_none().bg(t[DOT[p.level] ?? "accent"]);
     return h_flex()
       .id("toast")
       .size_full()
@@ -92,7 +82,7 @@ export default class Toast extends View {
         if (p.action?.name) run(p.action.name, p.action.args ?? {});
         closeOverlay(p.overlay);
       })
-      .child(glyph || div().size(8).rounded(4).flex_none().bg(t[DOT[p.level] ?? "accent"]))
+      .child(glyph)
       .child(
         notice ? noticeText(notice, t) : v_flex()
           .flex_1()
