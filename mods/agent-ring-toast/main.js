@@ -143,7 +143,8 @@ async function forward(notification) {
   const acknowledge = `${app} do ${quote(`workspace-chrome.ring-read/${address}`)}`;
   const focus = `${acknowledge}; ${app} do agent.focus --terminal ${quote(address)}`;
   const terminal = terminals().find(entry => entry.address === address);
-  const sessionTitle = [terminal?.report?.title, terminal?.title]
+  const snapshotBody = String(notification.body ?? "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const sessionTitle = [terminal?.report?.title, terminal?.title, snapshotBody[0]]
     .find(title => typeof title === "string" && title.trim());
   const machine = address.includes("/") ? address.split("/")[0] : null;
   const failed = kind === "suspended" && terminal?.report?.state === "error";
@@ -162,7 +163,7 @@ async function forward(notification) {
         notificationBody(address, terminal, kind, failed),
         agentImage(terminal, notification.title),
       ]);
-      const bannerArgs = [...args, "-message", body];
+      const bannerArgs = [...args, "-message", body || (kind === "done" ? "Finished" : failed ? "Agent reported an error" : "Needs your attention")];
       const withImage = image ? [...bannerArgs, "-contentImage", `file://${encodeURI(image).replace(/#/g, "%23").replace(/\?/g, "%3F")}`] : bannerArgs;
       try {
         if ((await exec(notifier, withImage)).code === 0) return;
