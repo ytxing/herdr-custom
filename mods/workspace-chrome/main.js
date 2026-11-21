@@ -30,6 +30,7 @@ const RING_READ = /^ring-read\/((?:[a-z0-9][a-z0-9_.-]*\/)?t[a-z0-9]+)$/;
 export default class WorkspaceChrome extends View {
   init(config, cx) {
     if (config?.footer || checking()) return;
+    this.pendingDone = new Map();
     cx.spawn(async () => {
       for (;;) {
         const acknowledge = RING_READ.exec(await nextCommand());
@@ -38,7 +39,7 @@ export default class WorkspaceChrome extends View {
     });
   }
 
-  observeVisibleAgents(cx) {
+  observeAgents(cx) {
     if (layout()?.toast !== "agent-ring-toast") {
       this.previousView = undefined;
       return;
@@ -55,22 +56,23 @@ export default class WorkspaceChrome extends View {
 
     const reports = new Map();
     const alerts = [];
-    for (const id of visible) {
+    for (const id of new Set([...allPanes.map(pane => pane.terminal), ...visible])) {
       const terminal = all.get(id);
       if (terminal?.state !== "live" || !terminal.report) continue;
       const { turn, report: { app, state } } = terminal;
-      const observed = active && previous?.active && previous.reports.get(id);
+      const observed = previous?.reports.get(id);
       const before = observed?.app === app ? observed : null;
-      reports.set(id, { app, turn, state });
+      reports.set(id, { app, turn, state, visible: visible.has(id) });
       if (!before) continue;
       // The Core turn also advances on a direct Working → Idle report.
       // Codex startup advances its first turn to Idle before receiving a prompt.
       const codexStartup = app === "codex" && turn === 1 && state === "idle";
       const completed = !codexStartup && (state === "done" || state === "idle") && turn > before.turn;
-      const needsUser = id === address && (state === "blocked" || state === "error") && state !== before.state;
-      if (completed || needsUser) alerts.push({ terminal, completed, failed: state === "error", focused: id === address });
+      const notify = active && previous?.active && before.visible && visible.has(id);
+      const needsUser = notify && id === address && (state === "blocked" || state === "error") && state !== before.state;
+      if (completed || needsUser) alerts.push({ terminal, completed, failed: state === "error", notify, focused: id === address });
     }
-    this.previousView = { address, pane: focus?.pane, active, reports };
+    this.previousView = { active, reports };
 
     const unread = shared("agent-ring.unreadDone") ?? {};
     const toClear = new Set();
@@ -82,32 +84,35 @@ export default class WorkspaceChrome extends View {
         toClear.add(id);
       }
     }
-    // Closing a pane can move focus without an explicit refocus.
-    if (unread[address] && active && previous && previous.address !== address &&
-        (!previous.pane || allPanes.some(pane => pane.pane === previous.pane))) toClear.add(address);
-
     if (toClear.size) cx.spawn(() => {
       const next = { ...shared("agent-ring.unreadDone") };
       for (const id of toClear) delete next[id];
       setShared("agent-ring.unreadDone", next);
     });
 
-    for (const alert of alerts) cx.spawn(async () => {
-      const { terminal } = alert;
-      if (alert.completed) {
-        const outcome = await turnOutcome(terminal);
-        const current = terminals().find(entry => entry.address === terminal.address);
-        if (outcome === "interrupted" || outcome === "stale" || current?.state !== "live" ||
-            current.turn !== terminal.turn || current.report?.app !== terminal.report.app ||
-            !["idle", "done"].includes(current.report.state)) return;
-        alert.failed = outcome === "error";
-        alert.completed = !alert.failed;
-        if (alert.completed) {
-          setShared("agent-ring.unreadDone", { ...shared("agent-ring.unreadDone"), [terminal.address]: true });
-        }
+    for (const alert of alerts) {
+      if (alert.completed) this.pendingDone.set(alert.terminal.address, alert);
+      cx.spawn(() => this.deliverAlert(alert));
+    }
+  }
+
+  async deliverAlert(alert) {
+    const { terminal } = alert;
+    if (alert.completed) {
+      const outcome = await turnOutcome(terminal);
+      const current = terminals().find(entry => entry.address === terminal.address);
+      if (this.pendingDone.get(terminal.address) !== alert) return;
+      this.pendingDone.delete(terminal.address);
+      if (outcome === "interrupted" || outcome === "stale" || current?.state !== "live" ||
+          current.turn !== terminal.turn || current.report?.app !== terminal.report.app ||
+          !["idle", "done"].includes(current.report.state)) return;
+      alert.failed = outcome === "error";
+      alert.completed = !alert.failed;
+      if (alert.completed && !alert.acknowledged) {
+        setShared("agent-ring.unreadDone", { ...shared("agent-ring.unreadDone"), [terminal.address]: true });
       }
-      this.notifyAgent(alert);
-    });
+    }
+    if (alert.notify) this.notifyAgent(alert);
   }
 
   notifyAgent({ terminal, completed: finished, failed, focused }) {
@@ -125,6 +130,8 @@ export default class WorkspaceChrome extends View {
   }
 
   acknowledgeDone(address) {
+    const pending = this.pendingDone.get(address);
+    if (pending) pending.acknowledged = true;
     const unread = shared("agent-ring.unreadDone");
     if (!unread?.[address]) return;
     const next = { ...unread };
@@ -153,7 +160,7 @@ export default class WorkspaceChrome extends View {
           .when(Boolean(updates().app.ready), el => el.child(collapsed ? ready.absolute().top(5).right(6) : ready)))
         .child(row("machine", "plus", "Add machine", true, () => run("mod.open", { name: "machine-add" })));
     }
-    if (!checking()) this.observeVisibleAgents(cx);
+    if (!checking()) this.observeAgents(cx);
     return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(13.5)
       .when(window()?.platform === "macos" && !window()?.fullscreen && !collapsed, el => el.pl(76))
       .when(!collapsed, el => el.child(h_flex().flex_1().gap(8).items_center().child(image("frame/welcome/herdr.png").size(20).rounded(5)).child(div().font_semibold().text_color(t.foreground).child("Herdr"))))

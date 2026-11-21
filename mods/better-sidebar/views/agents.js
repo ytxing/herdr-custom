@@ -1,6 +1,5 @@
 // Adapted from Herdr's shipped agents mod, with grouping by main space and by
 // name prefix. Agents in grouped or priority views; parents take their most urgent sub-agent's place.
-// A viewed done agent stays in Done until left.
 
 import { div, image, svg } from "gpui-kit";
 import { v_flex, h_flex, Input, InputState } from "gpui-base";
@@ -215,20 +214,9 @@ export class Agents {
     return this.changed[a.address]?.at ?? 0;
   }
 
-  // Looking at a done agent makes it idle; it stays with Done until you leave
-  // it rather than drop away under you. Any other change moves it at once.
-  hold(list) {
-    const cur = list.find((a) => a.focused);
-    const same = cur && cur.address === this.held?.address;
-    // Arriving, or any change but done turning idle, sets what it was.
-    if (!same || cur.status !== "idle")
-      this.held = cur ? { address: cur.address, rank: RANK[cur.status] ?? 0 } : null;
-  }
-
-  rank(a) {
-    const sawDone =
-      a.address === this.held?.address && this.held.rank === RANK.done && a.status === "idle";
-    return sawDone ? RANK.done : (RANK[a.status] ?? 0);
+  focusAgent(agent) {
+    run(`workspace-chrome.ring-read/${agent.address}`);
+    run("pane.focus", { pane: agent.pane });
   }
 
   peek(addr) {
@@ -395,7 +383,6 @@ export class Agents {
       agent.status === "idle" && unread?.[agent.address] ? { ...agent, status: "done" } : agent);
     this.listed = new Map(unordered.map((a) => [a.address, a.status]));
     this.track(unordered, now);
-    this.hold(native);
     this.prunePins(all);
 
     const byPriority = sort.id === "priority";
@@ -454,7 +441,7 @@ export class Agents {
   urgencies(list, all) {
     const kids = (a) =>
       this.tree(all, a.address).map((s) => RANK[kidStatus(s.t, this.listed)] ?? 0);
-    return new Map(list.map((a) => [a.address, Math.max(this.rank(a), ...kids(a))]));
+    return new Map(list.map((a) => [a.address, Math.max(RANK[a.status] ?? 0, ...kids(a))]));
   }
 
   byUrgency(list, urgency) {
@@ -749,10 +736,7 @@ export class Agents {
       .items_center()
       .gap(4)
       .hover((s) => s.bg(t.hover))
-      .on_click(() => {
-        if (shared("agent-ring.unreadDone")?.[a.address]) run(`workspace-chrome.ring-read/${a.address}`);
-        run("pane.focus", { pane: a.pane });
-      })
+      .on_click(() => this.focusAgent(a))
       .child(
         div()
           .flex_1()
@@ -794,10 +778,7 @@ export class Agents {
         this.hovered = on ? a.address : null;
         cx.notify();
       })
-      .on_click(() => {
-        if (shared("agent-ring.unreadDone")?.[a.address]) run(`workspace-chrome.ring-read/${a.address}`);
-        run("pane.focus", { pane: a.pane });
-      })
+      .on_click(() => this.focusAgent(a))
       .when(Boolean(pic), (el) => el.child(this.agentIcon(a, pic, subs)))
       .child(this.agentName(a, view, t))
       .when(view.nested && Boolean(machine), (el) =>

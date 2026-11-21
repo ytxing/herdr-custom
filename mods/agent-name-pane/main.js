@@ -87,22 +87,22 @@ export default class Pane extends View {
       .border_color(t.border)
       .text_size(12)
       .on_hover((hovered, cx) => { this.hovered = hovered; cx.notify(); })
-      .when(p.focused && Boolean(unread), el => el.on_mouse_down_out((event, cx) => {
+      .when(p.status === "done" || p.status === "idle", el => el.on_mouse_down_out((event, cx) => {
         const { button, local_position: point, bounds } = event;
         if (button !== "left" || !point || !bounds || point.x < 0 || point.x >= bounds.width) return;
         if (bottom ? point.y >= 0 : point.y < bounds.height) return;
+        if (focused()?.tab !== p.tab) return;
         // The native terminal handles the press first, including any focus change.
         cx.timer.after(0, () => {
           const focus = focused();
-          if (focus?.pane === pane && (focus.shown ?? focus.terminal) === p.terminal &&
-              shared("agent-ring.unreadDone")?.[p.terminal]) {
+          if (focus?.pane === pane && (focus.shown ?? focus.terminal) === p.terminal) {
             run(`workspace-chrome.ring-read/${p.terminal}`);
           }
         });
       }))
+      .on_mouse_down("left", () => run("pane.focus", { pane }))
       .on_click(() => {
-        if (shared("agent-ring.unreadDone")?.[p.terminal]) run(`workspace-chrome.ring-read/${p.terminal}`);
-        run("pane.focus", { pane });
+        if (p.terminal) run(`workspace-chrome.ring-read/${p.terminal}`);
       })
       .when(Boolean(pic), (el) => el.child(pic))
       .child(
