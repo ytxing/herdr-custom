@@ -2,6 +2,8 @@ import { View, div, image, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { checking, focused, layout, machines, nextCommand, notify, panes, props, run, setShared, shared, terminals, theme, updates, window } from "herdr";
 
+import { turnOutcome } from "./turn-outcome.js";
+
 function find(node, id) {
   if (node?.id === id) return node;
   for (const child of node?.children ?? []) {
@@ -55,17 +57,18 @@ export default class WorkspaceChrome extends View {
     const alerts = [];
     for (const id of visible) {
       const terminal = all.get(id);
-      if (!terminal?.report) continue;
+      if (terminal?.state !== "live" || !terminal.report) continue;
       const { turn, report: { app, state } } = terminal;
-      const before = active && previous?.active && previous.reports.get(id);
-      reports.set(id, { turn, state });
+      const observed = active && previous?.active && previous.reports.get(id);
+      const before = observed?.app === app ? observed : null;
+      reports.set(id, { app, turn, state });
       if (!before) continue;
       // The Core turn also advances on a direct Working → Idle report.
       // Codex startup advances its first turn to Idle before receiving a prompt.
       const codexStartup = app === "codex" && turn === 1 && state === "idle";
       const completed = !codexStartup && (state === "done" || state === "idle") && turn > before.turn;
       const needsUser = id === address && (state === "blocked" || state === "error") && state !== before.state;
-      if (completed || needsUser) alerts.push({ terminal, completed, focused: id === address });
+      if (completed || needsUser) alerts.push({ terminal, completed, failed: state === "error", focused: id === address });
     }
     this.previousView = { address, pane: focus?.pane, active, reports };
 
@@ -83,24 +86,39 @@ export default class WorkspaceChrome extends View {
     if (unread[address] && active && previous && previous.address !== address &&
         (!previous.pane || allPanes.some(pane => pane.pane === previous.pane))) toClear.add(address);
 
-    if (toClear.size || alerts.length) cx.spawn(() => {
+    if (toClear.size) cx.spawn(() => {
       const next = { ...shared("agent-ring.unreadDone") };
       for (const id of toClear) delete next[id];
-      for (const { terminal, completed } of alerts) if (completed) next[terminal.address] = true;
-      if (toClear.size || alerts.some(alert => alert.completed)) setShared("agent-ring.unreadDone", next);
-      for (const alert of alerts) this.notifyAgent(alert);
+      setShared("agent-ring.unreadDone", next);
+    });
+
+    for (const alert of alerts) cx.spawn(async () => {
+      const { terminal } = alert;
+      if (alert.completed) {
+        const outcome = await turnOutcome(terminal);
+        const current = terminals().find(entry => entry.address === terminal.address);
+        if (outcome === "interrupted" || outcome === "stale" || current?.state !== "live" ||
+            current.turn !== terminal.turn || current.report?.app !== terminal.report.app ||
+            !["idle", "done"].includes(current.report.state)) return;
+        alert.failed = outcome === "error";
+        alert.completed = !alert.failed;
+        if (alert.completed) {
+          setShared("agent-ring.unreadDone", { ...shared("agent-ring.unreadDone"), [terminal.address]: true });
+        }
+      }
+      this.notifyAgent(alert);
     });
   }
 
-  notifyAgent({ terminal, completed: finished, focused }) {
+  notifyAgent({ terminal, completed: finished, failed, focused }) {
     if (focused && shared("agent-ring.alerts")?.focusedPane !== true) return;
     const name = terminal.program?.name || terminal.report?.app || "Agent";
     const session = terminal.report?.title || terminal.title || "";
     const place = (terminal.labels?.where ?? terminal.where ?? "").replace(/\s*\/\s*\d+$/, "");
-    const reason = finished ? "" : terminal.report?.msg?.split(/\r?\n/).map(line => line.trim()).find(Boolean) || "Needs your attention";
+    const reason = finished ? "" : terminal.report?.msg?.split(/\r?\n/).map(line => line.trim()).find(Boolean) || (failed ? "Agent reported an error" : "Needs your attention");
     notify({
-      title: name + (finished ? " finished" : " needs you"),
-      body: [session, place].filter(Boolean).join("\n") + (reason ? `\n${reason}` : ""),
+      title: name + (finished ? " finished" : failed ? " failed" : " needs you"),
+      body: [session, place].join("\n") + (reason ? `\n${reason}` : ""),
       level: finished ? "info" : "error",
       action: { name: "agent.focus", args: { terminal: terminal.address } },
     });

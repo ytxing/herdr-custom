@@ -29,7 +29,7 @@ function agentNotice(notification) {
   const address = notification.action?.args?.terminal;
   const finished = notification.title?.endsWith(" finished");
   if (notification.action?.name !== "agent.focus" || typeof address !== "string" ||
-      (!finished && !notification.title?.endsWith(" needs you"))) return null;
+      (!finished && !notification.title?.endsWith(" needs you") && !notification.title?.endsWith(" failed"))) return null;
 
   const machine = address.includes("/") ? address.split("/")[0] : null;
   const lines = String(notification.body ?? "").split(/\r?\n/);
@@ -40,7 +40,7 @@ function agentNotice(notification) {
 }
 
 function noticeText(notice, t) {
-  const context = notice.session || notice.place;
+  const context = [notice.session, notice.place].filter(Boolean).join(" · ");
   return v_flex().flex_1().min_w(0).overflow_hidden().children([
     h_flex().gap(5).items_center().min_w(0)
       .child(div().truncate().font_semibold().text_size(13).text_color(t.foreground).child(notice.heading))

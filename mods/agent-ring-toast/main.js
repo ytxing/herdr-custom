@@ -134,7 +134,8 @@ async function agentImage(terminal, title) {
 async function forward(notification) {
   const address = notification.action?.args?.terminal;
   if (notification.action?.name !== "agent.focus" || typeof address !== "string" || !TERMINAL.test(address)) return;
-  const kind = notification.title?.endsWith(" needs you") ? "suspended"
+  const failureTitle = notification.title?.endsWith(" failed");
+  const kind = failureTitle || notification.title?.endsWith(" needs you") ? "suspended"
     : notification.title?.endsWith(" finished") ? "done" : null;
   if (!kind) return;
 
@@ -147,7 +148,7 @@ async function forward(notification) {
   const sessionTitle = [terminal?.report?.title, terminal?.title, snapshotBody[0]]
     .find(title => typeof title === "string" && title.trim());
   const machine = address.includes("/") ? address.split("/")[0] : null;
-  const failed = kind === "suspended" && terminal?.report?.state === "error";
+  const failed = failureTitle || (kind === "suspended" && terminal?.report?.state === "error");
   const heading = failed ? notification.title.replace(/ needs you$/, " failed") : notification.title;
   const title = (machine ? `${heading} @${machine}` : heading) || (kind === "done" ? "Agent finished" : "Agent needs your attention");
   const subtitle = sessionTitle?.replace(/\s+/g, " ").trim();
