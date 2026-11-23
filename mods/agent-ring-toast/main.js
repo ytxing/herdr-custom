@@ -111,7 +111,7 @@ async function agentImage(terminal, title) {
   }[app] ?? /^(pi|codex|claude|opencode)\b/i.exec(title)?.[1].toLowerCase();
   if (!iconName) return null;
   const icon = `${appHome()}/icons/${iconName}.svg`;
-  const cache = `${appHome()}/mods/agent-ring-toast/banner-icons`;
+  const cache = `${appHome()}/data/agent-ring-toast/banner-icons`;
   try {
     const result = await exec("sh", ["-c", `
       set -e
