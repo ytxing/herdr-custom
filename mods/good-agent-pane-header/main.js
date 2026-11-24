@@ -1,5 +1,5 @@
 // A pane's header, for layouts that frame their panes:
-//   { "tab": "active", "pane": { "header": { "content": { "mod": "agent-name-pane" } } } }
+//   { "tab": "active", "pane": { "header": { "content": { "mod": "good-agent-pane-header" } } } }
 // Shows the program's icon (the app's program table), the agent's name or
 // the terminal's title, the folder, and the agent's status; buttons split, zoom and close
 // this pane. Props from the app: { pane, terminal }. Click: focus the pane.
@@ -7,6 +7,15 @@
 import { View, div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { focused, panes, terminals, props, run, theme, home, layout, shared } from "herdr";
+
+// Keep in step with good-agent-sidebar/views/agents.js. OpenCode takes gold;
+// Pi takes mint, clear of Claude's coral.
+const AGENT_COLORS = {
+  claude: "#D97757",
+  codex: "#7A9DFF",
+  pi: "#4FC3A1",
+  opencode: "#F1BE58",
+};
 
 // Match the first visible tab frame, including the active child of a stack.
 function paneFrame(node) {
@@ -62,7 +71,7 @@ export default class Pane extends View {
         cx.stop_propagation();
         run(command, args);
       })
-      .child(svg(`mods/agent-name-pane/${icon}.svg`).size(14));
+      .child(svg(`mods/good-agent-pane-header/${icon}.svg`).size(14));
   }
 
   render(cx) {
@@ -73,6 +82,7 @@ export default class Pane extends View {
     const pic = icon(p.program, 14, t.dim);
     const unread = shared("agent-ring.unreadDone")?.[p.terminal];
     const st = p.status === "idle" && unread ? "done" : p.status;
+    const tint = AGENT_COLORS[p.program?.key] ?? t.working;
     const pane = p.pane;
     const bottom = paneFrame(layout())?.header?.position === "bottom";
     return h_flex()
@@ -96,13 +106,13 @@ export default class Pane extends View {
         cx.timer.after(0, () => {
           const focus = focused();
           if (focus?.pane === pane && (focus.shown ?? focus.terminal) === p.terminal) {
-            run(`workspace-chrome.ring-read/${p.terminal}`);
+            run(`good-agent-sidebar-header.ring-read/${p.terminal}`);
           }
         });
       }))
       .on_mouse_down("left", () => run("pane.focus", { pane }))
       .on_click(() => {
-        if (p.terminal) run(`workspace-chrome.ring-read/${p.terminal}`);
+        if (p.terminal) run(`good-agent-sidebar-header.ring-read/${p.terminal}`);
       })
       .when(Boolean(pic), (el) => el.child(pic))
       .child(
@@ -116,7 +126,7 @@ export default class Pane extends View {
           ),
       )
       .child(div().flex_1().truncate().text_color(t.dim).child(folder(p.cwd)))
-      .when(st === "working", el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
+      .when(st === "working", el => el.child(svg("mods/good-agent-sidebar-header/spinner.svg").size(12).flex_none().text_color(tint).spin(900)))
       .when(st === "blocked", el => el.child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).child("Needs you")))
       .when(st === "done", el => el.child(div().size(7).flex_none().rounded(4).bg(t.done)))
       .when(this.hovered, el => el

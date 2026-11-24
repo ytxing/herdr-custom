@@ -14,6 +14,15 @@ function find(node, id) {
 // Same as the agents mod: drops a status glyph, keeps a leading bracket or quote.
 const clean = (s) => (s ?? "").replace(/^[^\p{L}\p{N}\p{Ps}\p{Pi}]+/u, "").replace(/^\[ [!.] \] /, "").trim();
 
+// Keep in step with good-agent-sidebar/views/agents.js. OpenCode takes gold;
+// Pi takes mint, clear of Claude's coral.
+const AGENT_COLORS = {
+  claude: "#D97757",
+  codex: "#7A9DFF",
+  pi: "#4FC3A1",
+  opencode: "#F1BE58",
+};
+
 // pi titles its terminal "π - <session> - <folder>" ("π - <folder>" until the
 // session has a name). The glyph and the trailing folder repeat what the label
 // already says, so keep only the session.
@@ -184,8 +193,10 @@ export default class Tabs extends View {
       const status = c.status !== "blocked" && unreadTabs.has(c.id) ? "done" : c.status;
       const name = label(c, lead);
       // Every number sits in the same block; a working tab's block breathes
-      // instead of taking a different color.
+      // in its agent's color, as the agent rows do.
       const working = status === "working";
+      const busy = allPanes.find(p => p.tab === c.id && p.status === "working");
+      const tint = AGENT_COLORS[(busy ?? lead)?.program?.key] ?? t.working;
       return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).rounded(7).items_center().flex_none().text_size(12.8)
         // A rename or status dot on this or an earlier tab can push the active one out.
         .when(i <= active, el => el.on_size_change((_size, cx) => { this.scroll.scroll_to_item(active); cx.notify(); }))
@@ -199,11 +210,11 @@ export default class Tabs extends View {
         })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
         .child(div().w(16).h(16).flex_none().flex().items_center().justify_center().rounded(4)
-          .bg(t.foreground + "1f")
+          .bg(working ? tint + "4d" : t.foreground + "1f")
           .when(working, el => el.loop("opacity", { from: 0.35, to: 1, period: 1800 }))
           .text_size(11).text_color(c.active ? t.foreground : t.dim).child(String(i + 1)))
         .child(this.tabText(c, c.zoomed ? `${name} Z` : name))
-        .when(working, el => el.child(svg("mods/workspace-chrome/spinner.svg").size(12).flex_none().text_color(t.working).spin(900)))
+        .when(working, el => el.child(svg("mods/good-agent-sidebar-header/spinner.svg").size(12).flex_none().text_color(tint).spin(900)))
         .when(status === "blocked" || status === "done", el => el.child(div().size(6).rounded(3).bg(t[status])))
         .when(c.active, el => el.child(div().id(`close-${c.id}`).text_color(t.dim).on_mouse_down("left", stop).on_click((_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); }).child(svg("mods/pane/close.svg").size(12))));
     };
@@ -222,8 +233,8 @@ export default class Tabs extends View {
         .on_size_change((_size, cx) => { if (active >= 0) { this.scroll.scroll_to_item(active); cx.notify(); } })
         .children(shown.map(item)))
       .child(button("tab-new", "+", () => openOverlay({ mod: "new-menu", kind: "popup", width: 250, height: 512 })))
-      .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/tabs-marquee/win-min.svg").size(16) : "−", () => run("window.minimize")))
-        .child(button("maximize", w.platform === "windows" ? svg(`mods/tabs-marquee/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
-        .child(button("close-window", w.platform === "windows" ? svg("mods/tabs-marquee/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));
+      .when(w?.buttons, el => el.child(button("minimize", w.platform === "windows" ? svg("mods/good-agent-tab-bar/win-min.svg").size(16) : "−", () => run("window.minimize")))
+        .child(button("maximize", w.platform === "windows" ? svg(`mods/good-agent-tab-bar/${w.maximized ? "win-restore" : "win-max"}.svg`).size(16) : "□", () => run("window.maximize")))
+        .child(button("close-window", w.platform === "windows" ? svg("mods/good-agent-tab-bar/win-close.svg").size(16) : svg("mods/pane/close.svg").size(13), () => run("window.close"))));
   }
 }

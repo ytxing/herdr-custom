@@ -1,4 +1,6 @@
-mods/agent-ring-toast/AgentRingHerdr.app/
-mods/agent-ring-toast/sound-fx/**/*.mp3
+mods/good-agent-notifications/AgentRingHerdr.app/
+mods/good-agent-notifications/sound-fx/**/*.mp3
 mods/**/gpui-kit.d.ts
 mods/**/jsconfig.json
+
+.remember/

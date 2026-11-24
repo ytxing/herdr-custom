@@ -4,7 +4,7 @@
     const prefs = shared(key) ?? {};
     const set = (name, value) => setShared(key, { ...(shared(key) ?? {}), [name]: value });
     const fixed = prefs.mode === "fixed";
-    const soundScript = `${appHome()}/mods/agent-ring-toast/sound.cjs`;
+    const soundScript = `${appHome()}/mods/good-agent-notifications/sound.cjs`;
     const play = (kind) => exec("node", [soundScript, kind, fixed ? "fixed" : "random", "", prefs[kind] ?? ""]);
     const toggle = (name, label) => this.row(t, label, "", this.toggle(t, `ring-${name}`, prefs[name] !== false, () => set(name, prefs[name] === false)));
     const track = (kind, label, fallback) => this.row(t, label, fixed ? (prefs[kind] ?? fallback) : "Per agent", h_flex().gap(8)
@@ -23,7 +23,7 @@
       .child(toggle("sound", "Play agent sounds"))
       .child(this.row(t, "Sound selection", "Random assigns a sound to each agent pane.",
         this.button(t, "ring-mode", fixed ? "Fixed" : "Random per agent", () => set("mode", fixed ? "random" : "fixed"))))
-      .child(this.row(t, "Sound library", `${appHome()}/mods/agent-ring-toast/sound-fx/`, ""))
+      .child(this.row(t, "Sound library", `${appHome()}/mods/good-agent-notifications/sound-fx/`, ""))
       .child(track("done", "Agent finished", "whatthedogdoin.mp3"))
       .child(track("suspended", "Agent needs you", "error.mp3"));
   }

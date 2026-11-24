@@ -28,7 +28,7 @@ if (updated !== previousSettings) {
   fs.writeFileSync(temporary, updated, { flag: 'wx' });
   fs.renameSync(temporary, settings);
 }
-const sender = path.join(appHome, 'mods/agent-ring-toast/AgentRingHerdr.app');
+const sender = path.join(appHome, 'mods/good-agent-notifications/AgentRingHerdr.app');
 const template = path.join(os.homedir(), 'Applications/AgentRingCodex.app');
 const notifier = path.join(sender, 'Contents/MacOS/terminal-notifier');
 if (process.platform === 'darwin' && !fs.existsSync(notifier) && fs.existsSync(template) &&

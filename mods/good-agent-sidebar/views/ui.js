@@ -31,7 +31,7 @@ export function directoryTooltip(folder, machine) {
 }
 
 export const Icon = (name, size = 14) =>
-  svg(`mods/better-sidebar/icons/${name}.svg`).size(size).flex_none();
+  svg(`mods/good-agent-sidebar/icons/${name}.svg`).size(size).flex_none();
 
 export function Badge(text) {
   const t = theme();
@@ -78,6 +78,7 @@ export function GroupHeader({
   labelTooltip,
   number = null,
   numberBreathing = false,
+  numberColor = null,
   labelColor,
   folded = false,
   divided = false,
@@ -104,11 +105,11 @@ export function GroupHeader({
     .on_click((_e, cx) => onClick(cx))
     // A leading chevron indents the title; trailing leaves the title flush left.
     .when(!trailing, (el) => el.child(Icon(folded ? "chevron-right" : "chevron-down", 12).text_color(t.dim)))
-    // One neutral block for every number; a working tab's block breathes.
+    // One block for every number; a working tab's block breathes in its agent's tint.
     .when(number != null, (el) => el.child(
       div().w(16).h(16).flex_none().flex().items_center().justify_center()
         .rounded(RADIUS.small)
-        .bg(t.foreground + "1f")
+        .bg(numberColor ? numberColor + "4d" : t.foreground + "1f")
         .when(numberBreathing, (e) => e.loop("opacity", { from: 0.35, to: 1, period: 1800 }))
         .text_size(TEXT.caption)
         .text_color(prominent ? t.foreground : t.dim)

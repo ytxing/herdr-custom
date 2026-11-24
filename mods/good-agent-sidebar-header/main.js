@@ -40,7 +40,7 @@ export default class WorkspaceChrome extends View {
   }
 
   observeAgents(cx) {
-    if (layout()?.toast !== "agent-ring-toast") {
+    if (layout()?.toast !== "good-agent-notifications") {
       this.previousView = undefined;
       return;
     }
@@ -151,7 +151,7 @@ export default class WorkspaceChrome extends View {
       const row = (id, icon, label, dim, action) => h_flex().id(id).h(28).px(8).gap(9).items_center().rounded(8)
         .when(collapsed, el => el.relative().w(32).px(0).justify_center().tooltip(label))
         .text_color(dim ? t.dim : t.muted).hover(s => s.bg(t.hover).text_color(t.foreground)).cursor_pointer()
-        .on_click(action).child(svg(`mods/workspace-chrome/${icon}.svg`).size(14))
+        .on_click(action).child(svg(`mods/good-agent-sidebar-header/${icon}.svg`).size(14))
         .when(!collapsed, el => el.child(label));
       const ready = div().size(6).rounded_full().bg(t.accent);
       return v_flex().size_full().bg(t.chrome).border_t(1).border_color(t.border).px(8).pt(4).pb(8).text_size(13)
@@ -164,8 +164,8 @@ export default class WorkspaceChrome extends View {
     return h_flex().size_full().bg(t.chrome).pl(collapsed ? 6 : 14).pr(10).gap(4).items_center().text_size(13.5)
       .when(window()?.platform === "macos" && !window()?.fullscreen && !collapsed, el => el.pl(76))
       .when(!collapsed, el => el.child(h_flex().flex_1().gap(8).items_center().child(image("frame/welcome/herdr.png").size(20).rounded(5)).child(div().font_semibold().text_color(t.foreground).child("Herdr"))))
-      .when(!collapsed, el => el.child(this.button("search", svg("mods/workspace-chrome/search.svg").size(15), () => run("mod.open", { name: "picker" }))))
+      .when(!collapsed, el => el.child(this.button("search", svg("mods/good-agent-sidebar-header/search.svg").size(15), () => run("mod.open", { name: "picker" }))))
       // On the macOS rail the traffic lights fill the row; the agents list's » unfolds it.
-      .when(!(collapsed && window()?.platform === "macos"), el => el.child(this.button("sidebar-toggle", svg("mods/workspace-chrome/sidebar.svg").size(15), toggleSidebar)));
+      .when(!(collapsed && window()?.platform === "macos"), el => el.child(this.button("sidebar-toggle", svg("mods/good-agent-sidebar-header/sidebar.svg").size(15), toggleSidebar)));
   }
 }

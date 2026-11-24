@@ -70,14 +70,13 @@ function title(tab, l) {
 }
 // Agent marks take the agent's own color from its icon; other programs keep the theme's.
 // The four stay apart by hue and by lightness, so a 7 px dot still tells them apart:
-// orange 19°, gold 40° (much lighter), mint 160°, periwinkle 224°. Pi's logo carries
-// coral, blue and gold; gold keeps clear of Claude's coral. OpenCode's mark is
-// monochrome, so it takes the free cool hue instead of a shade that would read as idle.
+// orange 19°, gold 40° (much lighter), mint 160°, periwinkle 224°. OpenCode's mark is
+// monochrome, so it takes gold; Pi takes the free cool mint, clear of Claude's coral.
 const AGENT_COLORS = {
   claude: "#D97757",
   codex: "#7A9DFF",
-  pi: "#F1BE58",
-  opencode: "#4FC3A1",
+  pi: "#4FC3A1",
+  opencode: "#F1BE58",
 };
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
@@ -215,7 +214,7 @@ export class Agents {
   }
 
   focusAgent(agent) {
-    run(`workspace-chrome.ring-read/${agent.address}`);
+    run(`good-agent-sidebar-header.ring-read/${agent.address}`);
     run("pane.focus", { pane: agent.pane });
   }
 
@@ -659,14 +658,23 @@ export class Agents {
     // Status sections read like project headings: big colored text, right chevron.
     const isSection = view.byPriority && Boolean(group.status);
     const statusColor = group.id === LONG_IDLE ? t.dim : t[group.status] ?? t.muted;
+    // A working tab's number breathes in the same tint as the tab bar: the
+    // first working pane in the tab, else the tab's lead agent.
+    const tabId = group.members[0]?.tab;
+    const workingPane = panes().find((p) => p.tab === tabId && p.status === "working");
+    const tab = spaces().flatMap((s) => s.tabs).find((candidate) => candidate.id === tabId);
+    const tint = workingPane?.program ?? (tab ? lead(tab)?.program : null);
+    const numberColor = isTab && top === "working"
+      ? AGENT_COLORS[tint?.key] ?? t.working
+      : null;
     return GroupHeader({
       owner: this,
       id: group.id,
       label: group.label,
-      // Tabs keep their own number in front of the title, outside the marquee;
-      // a working tab's block breathes, as in the window's tab bar.
+      // Tabs keep their own number in front of the title, outside the marquee.
       number: isTab ? group.number : null,
       numberBreathing: isTab && top === "working",
+      numberColor,
       // An empty section stays listed, dimmed.
       labelColor: isSection
         ? group.members.length ? statusColor : t.dim

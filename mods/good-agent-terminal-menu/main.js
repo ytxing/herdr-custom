@@ -5,7 +5,7 @@ import { v_flex, h_flex } from "gpui-base";
 import { run, props, closeOverlay, openOverlay, notify, theme, keys, terminals, panes, spaces } from "herdr";
 
 function icon(name) {
-  return `mods/workspace-chrome/${name}.svg`;
+  return `mods/good-agent-sidebar-header/${name}.svg`;
 }
 
 // The key bound to a command, for the hint on the right.
@@ -61,8 +61,8 @@ export default class MyMenu extends View {
     // Once the program takes right-clicks, only Shift+right-click brings us back.
     if (target === "program")
       notify({
-        title: "Right-click goes to the program",
-        body: "Shift+right-click still opens this menu.",
+        title: "Right-click: app",
+        body: "Shift+right-click: menu",
       });
   }
 
@@ -72,7 +72,7 @@ export default class MyMenu extends View {
     const p = props();
     if (it.picker) {
       openOverlay({
-        mod: "my-menu",
+        mod: "good-agent-terminal-menu",
         kind: "popup",
         width: 260,
         height: 320,
@@ -218,7 +218,7 @@ export default class MyMenu extends View {
     if (props()?.pick === "tab") return this.renderTabPicker(t);
     const list = items(props());
     return v_flex()
-      .id("my-menu")
+      .id("good-agent-terminal-menu")
       .track_focus(this.handle)
       .w_full()
       .min_h(0)

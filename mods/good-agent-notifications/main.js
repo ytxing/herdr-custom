@@ -1,5 +1,5 @@
 import { appHome, checking, exec, hc, home, props, shared, terminals, window } from "herdr";
-import Toast, { attentionMessage } from "./toast.js";
+import Toast, { agentNotice, attentionMessage } from "./toast.js";
 
 const TERMINAL = /^(?:[a-z0-9][a-z0-9_.-]*\/)?t[a-z0-9]+$/;
 const quote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
@@ -111,7 +111,7 @@ async function agentImage(terminal, title) {
   }[app] ?? /^(pi|codex|claude|opencode)\b/i.exec(title)?.[1].toLowerCase();
   if (!iconName) return null;
   const icon = `${appHome()}/icons/${iconName}.svg`;
-  const cache = `${appHome()}/data/agent-ring-toast/banner-icons`;
+  const cache = `${appHome()}/data/good-agent-notifications/banner-icons`;
   try {
     const result = await exec("sh", ["-c", `
       set -e
@@ -141,21 +141,18 @@ async function forward(notification) {
 
   const config = shared("agent-ring.alerts") ?? {};
   const app = quote(`${home()}/.local/bin/herdr-app`);
-  const acknowledge = `${app} do ${quote(`workspace-chrome.ring-read/${address}`)}`;
+  const acknowledge = `${app} do ${quote(`good-agent-sidebar-header.ring-read/${address}`)}`;
   const focus = `${acknowledge}; ${app} do agent.focus --terminal ${quote(address)}`;
   const terminal = terminals().find(entry => entry.address === address);
-  const snapshotBody = String(notification.body ?? "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  const sessionTitle = [terminal?.report?.title, terminal?.title, snapshotBody[0]]
-    .find(title => typeof title === "string" && title.trim());
-  const machine = address.includes("/") ? address.split("/")[0] : null;
+  const { session, place, machine } = agentNotice(notification, terminal);
   const failed = failureTitle || (kind === "suspended" && terminal?.report?.state === "error");
   const heading = failed ? notification.title.replace(/ needs you$/, " failed") : notification.title;
   const title = (machine ? `${heading} @${machine}` : heading) || (kind === "done" ? "Agent finished" : "Agent needs your attention");
-  const subtitle = sessionTitle?.replace(/\s+/g, " ").trim();
+  const subtitle = session || place;
   const args = ["-title", title,
     "-group", `herdr-agent-ring/${address}`, "-activate", "dev.herdr.app", "-execute", focus];
   if (subtitle) args.push("-subtitle", subtitle);
-  const modDirectory = `${appHome()}/mods/agent-ring-toast`;
+  const modDirectory = `${appHome()}/mods/good-agent-notifications`;
   const tasks = [];
   if (config.banner !== false) {
     const notifier = `${modDirectory}/AgentRingHerdr.app/Contents/MacOS/terminal-notifier`;

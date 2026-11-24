@@ -89,9 +89,9 @@ export class Spaces {
   // Read the installed mod.json once; Herdr restarts the mod when it changes.
   applySettings(cx) {
     cx.spawn(async (cx) => {
-      const { settings, problems } = await loadSettings("better-sidebar", DEFAULT_SETTINGS);
+      const { settings, problems } = await loadSettings("good-agent-sidebar", DEFAULT_SETTINGS);
       this.settings = settings;
-      for (const problem of problems) console.warn(`better-sidebar mod.json settings: ${problem}`);
+      for (const problem of problems) console.warn(`good-agent-sidebar mod.json settings: ${problem}`);
       cx.notify();
     });
   }

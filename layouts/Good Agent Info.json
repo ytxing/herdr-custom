@@ -14,7 +14,7 @@
           "id": "brand",
           "type": "block",
           "content": {
-            "mod": "workspace-chrome"
+            "mod": "good-agent-sidebar-header"
           },
           "size": {
             "px": 46
@@ -25,7 +25,7 @@
           "id": "sidebar-lists",
           "type": "block",
           "content": {
-            "mod": "better-sidebar",
+            "mod": "good-agent-sidebar",
             "props": {
               "view": "lists"
             }
@@ -35,7 +35,7 @@
           "id": "sidebar-footer",
           "type": "block",
           "content": {
-            "mod": "better-sidebar",
+            "mod": "good-agent-sidebar",
             "props": {
               "view": "footer"
             }
@@ -61,7 +61,7 @@
           "id": "tabs",
           "type": "block",
           "content": {
-            "mod": "tabs-marquee"
+            "mod": "good-agent-tab-bar"
           },
           "size": {
             "px": 42
@@ -80,7 +80,7 @@
                 "pane": {
                   "header": {
                     "content": {
-                      "mod": "agent-name-pane"
+                      "mod": "good-agent-pane-header"
                     },
                     "reveal": "always",
                     "height": 30,
@@ -113,14 +113,14 @@
                       "id": "files",
                       "type": "block",
                       "content": {
-                        "mod": "files"
+                        "mod": "good-agent-file-browser"
                       }
                     },
                     {
                       "id": "changes",
                       "type": "block",
                       "content": {
-                        "mod": "changes"
+                        "mod": "good-agent-git-changes"
                       }
                     }
                   ],
@@ -142,7 +142,7 @@
           "id": "status",
           "type": "block",
           "content": {
-            "mod": "workspace-status"
+            "mod": "good-agent-workspace-status"
           },
           "size": {
             "px": 28
@@ -166,6 +166,6 @@
     12,
     16
   ],
-  "terminal_menu": "my-menu",
-  "toast": "agent-ring-toast"
+  "terminal_menu": "good-agent-terminal-menu",
+  "toast": "good-agent-notifications"
 }

@@ -4,7 +4,7 @@
 
 import { View, div, image } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { closeOverlay, props, run, shared, theme } from "herdr";
+import { closeOverlay, props, run, shared, terminals, theme } from "herdr";
 
 const DOT = { error: "blocked", warning: "working", success: "done", info: "accent" };
 
@@ -25,7 +25,7 @@ export function attentionMessage(terminal, state) {
 
 const clean = (value) => typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
 
-function agentNotice(notification) {
+export function agentNotice(notification, terminal) {
   const address = notification.action?.args?.terminal;
   const finished = notification.title?.endsWith(" finished");
   if (notification.action?.name !== "agent.focus" || typeof address !== "string" ||
@@ -33,20 +33,28 @@ function agentNotice(notification) {
 
   const machine = address.includes("/") ? address.split("/")[0] : null;
   const lines = String(notification.body ?? "").split(/\r?\n/);
-  const context = [clean(lines.shift()), clean(lines.shift())].filter(Boolean);
-  const session = context[0] || "";
-  const place = context.slice(1).join(" · ");
-  return { heading: notification.title, machine, session, place, reason: clean(lines.join(" ")) };
+  // Herdr's background alert supplies one line of location. The sidebar
+  // header supplies separate session and location lines, plus an optional reason.
+  const [snapshotSession, place, ...detail] = lines.length > 1 ? lines : ["", ...lines];
+  const program = clean(terminal?.program?.name).toLowerCase();
+  const session = [snapshotSession, terminal?.report?.title, terminal?.title]
+    .map(clean).find(title => title && title.toLowerCase() !== program) ?? "";
+  const state = notification.title.endsWith(" failed") ? "error" : "blocked";
+  const reason = clean(detail.join(" ")) || (finished ? "" : attentionMessage(terminal, state));
+  return { heading: notification.title, machine, session, place: clean(place), reason };
 }
 
 function noticeText(notice, t) {
-  const context = [notice.session, notice.place].filter(Boolean).join(" · ");
+  const context = notice.reason
+    ? [notice.session, notice.place].filter(Boolean).join(" · ")
+    : notice.session || notice.place;
+  const detail = notice.reason || (notice.session ? notice.place : "");
   return v_flex().flex_1().min_w(0).overflow_hidden().children([
     h_flex().gap(5).items_center().min_w(0)
       .child(div().truncate().font_semibold().text_size(13).text_color(t.foreground).child(notice.heading))
       .when(Boolean(notice.machine), el => el.child(div().truncate().text_size(12).text_color(t.muted).child(`@${notice.machine}`))),
     context ? div().truncate().text_size(12).text_color(t.foreground).child(context) : null,
-    notice.reason ? div().truncate().text_size(12).text_color(t.muted).child(notice.reason) : null,
+    detail ? div().truncate().text_size(12).text_color(t.muted).child(detail) : null,
   ].filter(Boolean));
 }
 
@@ -56,7 +64,9 @@ export default class Toast extends View {
     const p = props() ?? {};
     const login = /^([a-z0-9][a-z0-9_.-]{0,31}) needs login; run hc machine login \1$/.exec(p.body ?? "");
     const command = login ? `hc machine login ${login[1]}` : null;
-    const notice = login ? null : agentNotice(p);
+    const address = p.action?.name === "agent.focus" ? p.action.args?.terminal : null;
+    const terminal = address ? terminals().find(entry => entry.address === address) : null;
+    const notice = login ? null : agentNotice(p, terminal);
     const glyph = p.icon ? image(p.icon).w(18).h(18).flex_none() : div().size(8).rounded(4).flex_none().bg(t[DOT[p.level] ?? "accent"]);
     return h_flex()
       .id("toast")
@@ -70,7 +80,7 @@ export default class Toast extends View {
       .on_click(() => {
         const address = p.action?.args?.terminal;
         if (p.action?.name === "agent.focus" && shared("agent-ring.unreadDone")?.[address]) {
-          run(`workspace-chrome.ring-read/${address}`);
+          run(`good-agent-sidebar-header.ring-read/${address}`);
         }
         if (p.action?.name) run(p.action.name, p.action.args ?? {});
         closeOverlay(p.overlay);
