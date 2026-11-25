@@ -31,8 +31,9 @@ const readOutcome = String.raw`
     if $app == "codex" then
       select(.type == "event_msg")
       | select(.payload.type == "task_started" or .payload.type == "task_complete" or .payload.type == "turn_aborted")
-      | {outcome: (if .payload.type == "turn_aborted" and .payload.reason == "interrupted" then "interrupted"
-                   elif .payload.type == "task_started" then "stale" else "other" end),
+      | {outcome: (if .payload.type == "task_complete" then "completed"
+                   elif .payload.type == "task_started" then "stale"
+                   elif .payload.reason == "interrupted" then "interrupted" else "stale" end),
          time: (.payload.completed_at | numbers * 1000 // null), timestamp}
     elif $app == "claude" then
       select(.sessionId == $session and .isSidechain == false and .isMeta != true)
@@ -73,8 +74,8 @@ export async function turnOutcome(terminal) {
     const record = JSON.parse(session.stdout);
     const exactTime = typeof record.time === "number";
     const time = exactTime ? record.time : Date.parse(record.time ?? record.timestamp);
-    const tolerance = app === "codex" && !exactTime ? 30_000 : 2_000;
-    // Codex completed_at rounds to seconds; an abort only has its transcript timestamp.
+    const tolerance = app === "codex" && (!exactTime || machine) ? 30_000 : 2_000;
+    // Codex completed_at rounds to seconds; aborts and remote status delivery need more slack.
     return Number.isFinite(time) && Math.abs(time - current.status_ms) <= tolerance ? record.outcome : null;
   } catch {
     return null;

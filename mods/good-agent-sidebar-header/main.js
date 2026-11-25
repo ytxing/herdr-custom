@@ -103,7 +103,10 @@ export default class WorkspaceChrome extends View {
       const current = terminals().find(entry => entry.address === terminal.address);
       if (this.pendingDone.get(terminal.address) !== alert) return;
       this.pendingDone.delete(terminal.address);
-      if (outcome === "interrupted" || outcome === "stale" || current?.state !== "live" ||
+      const unconfirmedCodex = terminal.report.app === "codex" && outcome !== "completed";
+      // Codex can report idle for a side conversation or a replay. Only a task_complete
+      // matched to this status transition proves that the main turn completed.
+      if (unconfirmedCodex || outcome === "interrupted" || outcome === "stale" || current?.state !== "live" ||
           current.turn !== terminal.turn || current.report?.app !== terminal.report.app ||
           !["idle", "done"].includes(current.report.state)) return;
       alert.failed = outcome === "error";

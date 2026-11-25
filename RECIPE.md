@@ -44,6 +44,8 @@ The mod uses Node.js and macOS audio tools. Install `terminal-notifier` for syst
 
 Completion banners show the most recent user prompt. Codex, Claude Code, and Pi share a JSONL reader that searches backwards from the end of the transcript. Codex selects the main session from the foreground process’s open files. Claude Code resolves the interactive session ID for that PID. Load `pi-session.ts` as a Pi extension on each machine running Pi. At completion it identifies the current transcript and the user entry on the active branch. The reader needs `jq` on the agent machine, `lsof` for Codex, and `tac` on Linux or `tail -r` on macOS. OpenCode reads its SQLite database using `sqlite3` and an explicit `--session` ID. When the prompt is unavailable, the banner shows `Finished`.
 
+Codex Done markers and completion alerts require a `task_complete` in the main rollout whose timestamp matches the status transition. Side-conversation and replayed idle transitions, older completions, and unavailable outcome metadata do not create completion alerts. Remote status delivery has a 30-second tolerance.
+
 After installing the mod, run `node mods/good-agent-notifications/install-alerts.cjs` while Herdr is running, then reopen Settings. Herdr regenerates its built-in Settings screen on startup. Run the same command after a restart to restore the controls. The saved preferences are retained.
 
 ## Requirements
