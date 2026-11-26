@@ -26,17 +26,34 @@ function toggleSidebar() {
 }
 
 const RING_READ = /^ring-read\/((?:[a-z0-9][a-z0-9_.-]*\/)?t[a-z0-9]+)$/;
+// A Codex toast Herdr posted before this mod settled the turn: the toast mod
+// closes it and hands it back here with the turn it belongs to.
+const RING_HOLD = /^ring-hold\/((?:[a-z0-9][a-z0-9_.-]*\/)?t[a-z0-9]+)$/;
+
+const focusedAddress = () => {
+  const focus = focused();
+  return focus?.shown ?? focus?.terminal ?? null;
+};
 
 export default class WorkspaceChrome extends View {
   init(config, cx) {
     if (config?.footer || checking()) return;
     this.pendingDone = new Map();
+    this.heldDone = new Map();
     cx.spawn(async () => {
       for (;;) {
-        const acknowledge = RING_READ.exec(await nextCommand());
+        const command = await nextCommand();
+        const acknowledge = RING_READ.exec(command);
         if (acknowledge) this.acknowledgeDone(acknowledge[1]);
+        const hold = RING_HOLD.exec(command);
+        if (hold) this.holdDone(hold[1]);
       }
     });
+  }
+
+  holdDone(address) {
+    const turn = terminals().find(entry => entry.address === address)?.turn;
+    if (turn !== undefined) this.heldDone.set(address, turn);
   }
 
   observeAgents(cx) {
@@ -70,9 +87,33 @@ export default class WorkspaceChrome extends View {
       const completed = !codexStartup && (state === "done" || state === "idle") && turn > before.turn;
       const notify = active && previous?.active && before.visible && visible.has(id);
       const needsUser = notify && id === address && (state === "blocked" || state === "error") && state !== before.state;
-      if (completed || needsUser) alerts.push({ terminal, completed, failed: state === "error", notify, focused: id === address });
+      if (completed || needsUser) alerts.push({ terminal, completed, failed: state === "error", notify, focused: id === address, previousState: before.state });
     }
     this.previousView = { active, reports };
+
+    const turnStatus = { ...shared("agent-ring.turnStatus") };
+    let statusChanged = false;
+    for (const [id, current] of reports) {
+      if (current.app === "codex" && current.state === "working" && turnStatus[id]) {
+        delete turnStatus[id];
+        statusChanged = true;
+      }
+    }
+    // A resolution reads one live terminal's turn; it has nothing to say once it ends.
+    for (const id of Object.keys(turnStatus)) {
+      if (all.get(id)?.state === "live") continue;
+      delete turnStatus[id];
+      statusChanged = true;
+    }
+    for (const alert of alerts) {
+      if (!alert.completed || alert.terminal.report.app !== "codex") continue;
+      turnStatus[alert.terminal.address] = {
+        turn: alert.terminal.turn,
+        status: alert.previousState === "working" ? "working" : "idle",
+      };
+      statusChanged = true;
+    }
+    if (statusChanged) cx.spawn(() => setShared("agent-ring.turnStatus", turnStatus));
 
     const unread = shared("agent-ring.unreadDone") ?? {};
     const toClear = new Set();
@@ -80,7 +121,7 @@ export default class WorkspaceChrome extends View {
     for (const id of Object.keys(unread)) {
       const terminal = all.get(id);
       const machine = id.includes("/") ? id.split("/")[0] : null;
-      if (terminal ? terminal.state !== "live" || terminal.report?.state === "working" : readyMachines.has(machine)) {
+      if (terminal ? terminal.state !== "live" || terminal.report?.state === "working" || id === address : readyMachines.has(machine)) {
         toClear.add(id);
       }
     }
@@ -94,6 +135,10 @@ export default class WorkspaceChrome extends View {
       if (alert.completed) this.pendingDone.set(alert.terminal.address, alert);
       cx.spawn(() => this.deliverAlert(alert));
     }
+    // Looking at a pane acknowledges its completion, as it does in Herdr: the
+    // word an agent keeps after a turn ("done" as well as "idle") adds no marker.
+    const pending = address && this.pendingDone.get(address);
+    if (pending) pending.acknowledged = true;
   }
 
   async deliverAlert(alert) {
@@ -106,20 +151,35 @@ export default class WorkspaceChrome extends View {
       const unconfirmedCodex = terminal.report.app === "codex" && outcome !== "completed";
       // Codex can report idle for a side conversation or a replay. Only a task_complete
       // matched to this status transition proves that the main turn completed.
-      if (unconfirmedCodex || outcome === "interrupted" || outcome === "stale" || current?.state !== "live" ||
-          current.turn !== terminal.turn || current.report?.app !== terminal.report.app ||
-          !["idle", "done"].includes(current.report.state)) return;
+      const rejected = unconfirmedCodex || outcome === "interrupted" || outcome === "stale" || current?.state !== "live" ||
+        current.turn !== terminal.turn || current.report?.app !== terminal.report.app ||
+        !["idle", "done"].includes(current.report.state);
+      const held = this.heldDone.get(terminal.address) === terminal.turn;
+      this.heldDone.delete(terminal.address);
+      if (terminal.report.app === "codex") {
+        const status = rejected ? outcome === "working" ? "working" : "idle" : "done";
+        setShared("agent-ring.turnStatus", {
+          ...shared("agent-ring.turnStatus"),
+          [terminal.address]: { turn: terminal.turn, status },
+        });
+      }
+      if (rejected) return;
       alert.failed = outcome === "error";
       alert.completed = !alert.failed;
-      if (alert.completed && !alert.acknowledged) {
-        setShared("agent-ring.unreadDone", { ...shared("agent-ring.unreadDone"), [terminal.address]: true });
+      if (alert.completed) {
+        // Herdr's toast for this turn waited for it: post it now.
+        if (held) alert.native = true;
+        if (!alert.acknowledged && focusedAddress() !== terminal.address) {
+          setShared("agent-ring.unreadDone", { ...shared("agent-ring.unreadDone"), [terminal.address]: true });
+        }
       }
     }
-    if (alert.notify) this.notifyAgent(alert);
+    if (alert.notify || alert.native) this.notifyAgent(alert);
   }
 
-  notifyAgent({ terminal, completed: finished, failed, focused }) {
-    if (focused && shared("agent-ring.alerts")?.focusedPane !== true) return;
+  notifyAgent({ terminal, completed: finished, failed, focused, native }) {
+    // A toast Herdr posted itself needs no "focused pane" opt-in: the person wasn't watching.
+    if (!native && focused && shared("agent-ring.alerts")?.focusedPane !== true) return;
     const name = terminal.program?.name || terminal.report?.app || "Agent";
     const session = terminal.report?.title || terminal.title || "";
     const place = (terminal.labels?.where ?? terminal.where ?? "").replace(/\s*\/\s*\d+$/, "");

@@ -81,7 +81,13 @@ export default class Pane extends View {
     const name = label(p);
     const pic = icon(p.program, 14, t.dim);
     const unread = shared("agent-ring.unreadDone")?.[p.terminal];
-    const st = p.status === "idle" && unread ? "done" : p.status;
+    const terminal = terminals().find(entry => entry.address === p.terminal);
+    const resolution = shared("agent-ring.turnStatus")?.[p.terminal];
+    const native = p.status === "done" && resolution?.turn === terminal?.turn ? resolution.status : p.status;
+    const marked = native === "idle" && unread ? "done" : native;
+    // Herdr holds a completion at "done" until the person touches the pane; a
+    // focused pane is being looked at, so it reads idle.
+    const st = p.focused && marked === "done" ? "idle" : marked;
     const tint = AGENT_COLORS[p.program?.key] ?? t.working;
     const pane = p.pane;
     const bottom = paneFrame(layout())?.header?.position === "bottom";

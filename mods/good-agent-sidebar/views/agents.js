@@ -79,6 +79,25 @@ const AGENT_COLORS = {
   opencode: "#F1BE58",
 };
 const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+// The pin follows the pointer only while the pointer is known to be there.
+// Rows reorder under a still pointer without a hover-out, so the lease bounds
+// how long a stale pin can stay on screen.
+const HOVER_LINGER_MS = 4000;
+export function resolvedStatus(address, status, all, turnStatus) {
+  if (status !== "done") return status;
+  const resolution = turnStatus?.[address];
+  const turn = all.find(terminal => terminal.address === address)?.turn;
+  return resolution?.turn === turn ? resolution.status : status;
+}
+export function resolvedAgents(native, all, turnStatus, unread) {
+  return native.map(agent => {
+    const status = resolvedStatus(agent.address, agent.status, all, turnStatus);
+    const marked = status === "idle" && unread?.[agent.address] ? "done" : status;
+    // Herdr holds a completion at "done" until the person touches the pane; a
+    // focused pane is being looked at, so it reads idle.
+    return { ...agent, status: agent.focused && marked === "done" ? "idle" : marked };
+  });
+}
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
 const kidStatus = (k, listed) => {
@@ -377,9 +396,9 @@ export class Agents {
     const all = terminals();
     const now = Date.now();
     const unread = shared("agent-ring.unreadDone");
+    const turnStatus = shared("agent-ring.turnStatus");
     const native = agents();
-    const unordered = native.map(agent =>
-      agent.status === "idle" && unread?.[agent.address] ? { ...agent, status: "done" } : agent);
+    const unordered = resolvedAgents(native, all, turnStatus, unread);
     this.listed = new Map(unordered.map((a) => [a.address, a.status]));
     this.track(unordered, now);
     this.prunePins(all);
@@ -488,6 +507,43 @@ export class Agents {
   toggleFold(id, cx) {
     if (!this.folded.delete(id)) this.folded.add(id);
     cx.notify();
+  }
+
+  // The pin and the row's hover state live only as long as a hover the pointer
+  // can still be under. A reordered or removed row sends no hover-out.
+  hoverAgent(address, cx) {
+    const same = this.hovered === address;
+    if (same && address == null) return;
+    if (!same) {
+      this.hovered = address;
+      cx.notify();
+    }
+    if (address == null) {
+      this.hoverTimer?.cancel();
+      this.hoverTimer = null;
+      return;
+    }
+    // Renew at most once a second: pointer movement over the row keeps the pin,
+    // a still pointer lets the lease run out.
+    const now = Date.now();
+    if (same && now - (this.hoverRenewedAt ?? 0) < 1000) return;
+    this.hoverRenewedAt = now;
+    this.hoverTimer?.cancel();
+    this.hoverTimer = cx.timer.after(HOVER_LINGER_MS, (cx) => {
+      if (this.hovered !== address) return;
+      this.hovered = null;
+      this.hoverTimer = null;
+      cx.notify();
+    });
+  }
+
+  clearHover() {
+    const wasHovered = this.hovered != null;
+    this.hovered = null;
+    this.hoverRenewedAt = 0;
+    this.hoverTimer?.cancel();
+    this.hoverTimer = null;
+    return wasHovered;
   }
 
   // ── Drawing ───────────────────────────────────────────────────────────────
@@ -781,10 +837,13 @@ export class Agents {
       .when(a.focused, (el) => el.bg(t.selected))
       .cursor_pointer()
       .hover((s) => s.bg(t.hover))
+      .on_mouse_move((_event, cx) => {
+        // The hover lease can end while the pointer rests; movement renews it.
+        this.hoverAgent(a.address, cx);
+      })
       .on_hover((on, cx) => {
         if (on === (this.hovered === a.address)) return;
-        this.hovered = on ? a.address : null;
-        cx.notify();
+        this.hoverAgent(on ? a.address : null, cx);
       })
       .on_click(() => this.focusAgent(a))
       .when(Boolean(pic), (el) => el.child(this.agentIcon(a, pic, subs)))
@@ -914,7 +973,7 @@ export class Agents {
         cx.stop_propagation();
         this.setPins(pinned ? this.pins.filter((p) => p !== a.address) : [...this.pins, a.address]);
         // The row moves away from under the pointer, and no hover-out comes.
-        this.hovered = null;
+        this.clearHover();
         clearMarqueeHover(this);
         cx.notify();
       })

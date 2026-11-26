@@ -3,9 +3,10 @@
 // With `combined: false` in the settings: the two lists one above the other,
 // as two blocks of this mod would draw them.
 import { v_flex, h_flex } from "gpui-base";
-import { agents, focused, shared, theme, setAgentOrder } from "herdr";
+import { focused, shared, theme, setAgentOrder } from "herdr";
 import { Spaces } from "./spaces.js";
 import { Agents } from "./agents.js";
+import { clearMarqueeHover } from "./marquee.js";
 import { TEXT, Rail } from "./ui.js";
 
 const TABS = ["spaces", "tabs", "status"];
@@ -29,9 +30,20 @@ export class Lists {
   }
 
   pick(tab, cx) {
+    clearMarqueeHover(this.spaces);
+    clearMarqueeHover(this.agents);
+    this.agents.clearHover();
     this.tab = tab;
     localStorage.setItem("lists.tab", tab);
     cx.notify();
+  }
+
+  // A pointer that leaves the sidebar gets no hover-out on the row it was on.
+  clearHover(cx) {
+    let cleared = clearMarqueeHover(this.spaces);
+    if (clearMarqueeHover(this.agents)) cleared = true;
+    if (this.agents.clearHover()) cleared = true;
+    if (cleared) cx.notify();
   }
 
   render() {
@@ -43,7 +55,13 @@ export class Lists {
       .min_h(0)
       .bg(t.chrome)
       .text_size(TEXT.body)
-      .on_size_change((size, cx) => this.spaces.resized(size, cx));
+      .on_size_change((size, cx) => this.spaces.resized(size, cx))
+      .on_window_mouse_move(({ local_position: point, bounds }, cx) => {
+        const inside =
+          point.x >= 0 && point.y >= 0 &&
+          point.x <= bounds.width && point.y <= bounds.height;
+        if (!inside) this.clearHover(cx);
+      });
     this.spaces.under = null;
     this.spaces.quiet = null;
     this.spaces.above = null;
@@ -67,7 +85,8 @@ export class Lists {
     // Next-agent keys follow the same visible order.
     const nested = { ...view, sort: { id: "grouped" }, byPriority: false, nested: true };
     const order = [];
-    const all = agents();
+    const all = view.groups.flatMap(group => group.members);
+    const priority = { blocked: 4, error: 4, done: 3, working: 2, idle: 1 };
     // Pinned agents go above every space, in the Agents tab's Pinned group.
     const pinned = view.groups.find((g) => g.id === "pinned");
     const pins = pinned?.members.map((a) => a.address) ?? [];
@@ -85,7 +104,6 @@ export class Lists {
           ? tab.settled ? [] : [{ tab }]
           : all.filter((a) => a.tab === tab.id && !pins.includes(a.address)).map((a) => ({ a })),
       );
-      const priority = { blocked: 4, error: 4, done: 3, working: 2, idle: 1 };
       items.sort((x, y) =>
         (priority[y.a?.status] ?? 0) - (priority[x.a?.status] ?? 0) ||
         (y.a ? this.agents.since(y.a) : 0) - (x.a ? this.agents.since(x.a) : 0),

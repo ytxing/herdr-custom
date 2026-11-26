@@ -1,6 +1,6 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
+import { spaces, panes, terminals, run, openOverlay, theme, window, shared, layout, settings } from "herdr";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -22,6 +22,17 @@ const AGENT_COLORS = {
   pi: "#4FC3A1",
   opencode: "#F1BE58",
 };
+
+const STATUS_RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+export function resolvedPaneStatus(pane, turns, turnStatus, unread) {
+  let status = pane.status;
+  const resolution = turnStatus?.[pane.terminal];
+  if (status === "done" && resolution?.turn === turns.get(pane.terminal)) status = resolution.status;
+  if (status === "idle" && unread?.[pane.terminal]) status = "done";
+  // Herdr holds a completion at "done" until the person touches the pane; a
+  // focused pane is being looked at, so it reads idle.
+  return pane.focused && status === "done" ? "idle" : status;
+}
 
 // pi titles its terminal "π - <session> - <folder>" ("π - <folder>" until the
 // session has a name). The glyph and the trailing folder repeat what the label
@@ -178,8 +189,10 @@ export default class Tabs extends View {
     const active = shown.findIndex(tab => tab.active);
     const selected = shown[active]?.id;
     const unread = shared("agent-ring.unreadDone");
+    const turnStatus = shared("agent-ring.turnStatus");
     const allPanes = panes();
-    const unreadTabs = new Set(allPanes.filter(p => p.status === "idle" && unread?.[p.terminal]).map(p => p.tab));
+    const turns = new Map(terminals().map(terminal => [terminal.address, terminal.turn]));
+    const effective = new Map(allPanes.map(pane => [pane.pane, resolvedPaneStatus(pane, turns, turnStatus, unread)]));
     if (selected !== this.selected || active !== this.selectedIndex) {
       this.selected = selected;
       this.selectedIndex = active;
@@ -190,12 +203,14 @@ export default class Tabs extends View {
       .on_mouse_down("left", stop).on_click(action).child(label);
     const item = (c, i) => {
       const lead = allPanes.find(p => p.tab === c.id && p.program?.agent) ?? allPanes.find(p => p.tab === c.id);
-      const status = c.status !== "blocked" && unreadTabs.has(c.id) ? "done" : c.status;
+      const states = allPanes.filter(p => p.tab === c.id).map(p => ({ pane: p, status: effective.get(p.pane) }));
+      const status = states.reduce((best, entry) =>
+        (STATUS_RANK[entry.status] ?? 0) > (STATUS_RANK[best] ?? 0) ? entry.status : best, null) ?? c.status;
       const name = label(c, lead);
       // Every number sits in the same block; a working tab's block breathes
       // in its agent's color, as the agent rows do.
       const working = status === "working";
-      const busy = allPanes.find(p => p.tab === c.id && p.status === "working");
+      const busy = states.find(entry => entry.status === "working")?.pane;
       const tint = AGENT_COLORS[(busy ?? lead)?.program?.key] ?? t.working;
       return h_flex().id(`tab-${c.id}`).h(29).px(10).gap(7).rounded(7).items_center().flex_none().text_size(12.8)
         // A rename or status dot on this or an earlier tab can push the active one out.

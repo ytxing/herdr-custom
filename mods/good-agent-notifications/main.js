@@ -1,4 +1,5 @@
-import { appHome, checking, exec, hc, home, props, shared, terminals, window } from "herdr";
+import { div } from "gpui-kit";
+import { appHome, checking, closeOverlay, exec, hc, home, props, run, shared, terminals, window } from "herdr";
 import Toast, { agentNotice, attentionMessage } from "./toast.js";
 
 const TERMINAL = /^(?:[a-z0-9][a-z0-9_.-]*\/)?t[a-z0-9]+$/;
@@ -179,11 +180,33 @@ async function forward(notification) {
   await Promise.allSettled(tasks);
 }
 
+// Herdr posts "Codex finished" for a side thread's report as readily as for the
+// main turn's, and the sidebar header settles each turn against the main rollout.
+// A toast that arrives first is closed at once, since an overlay left without
+// content draws as an empty box, and the header posts it again once the turn holds.
+function turnConfirmed(notification) {
+  const address = notification.action?.args?.terminal;
+  const terminal = terminals().find(entry => entry.address === address);
+  if (!notification.title?.endsWith(" finished") || terminal?.report?.app !== "codex") return true;
+  const resolution = shared("agent-ring.turnStatus")?.[address];
+  return resolution?.turn === terminal.turn && resolution.status === "done";
+}
+
 export default class AgentRingToast extends Toast {
   init(_props, cx) {
     const notification = props() ?? {};
-    if (!checking() && notification.title && window()?.platform === "macos") {
-      cx.spawn(() => forward(notification));
+    if (checking() || !notification.title) return;
+    if (!turnConfirmed(notification)) {
+      // The overlay is not a place to wait: it has no content to wait with.
+      run(`good-agent-sidebar-header.ring-hold/${notification.action.args.terminal}`);
+      closeOverlay(notification.overlay);
+      this.held = true;
+      return;
     }
+    if (window()?.platform === "macos") cx.spawn(() => forward(notification));
+  }
+
+  render(cx) {
+    return this.held ? div() : super.render(cx);
   }
 }

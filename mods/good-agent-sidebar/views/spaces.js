@@ -4,6 +4,8 @@ import { div } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import {
   spaces,
+  agents,
+  terminals,
   machines,
   panes,
   run,
@@ -20,6 +22,7 @@ import { PRStatusObserver, prPlaceKey, prAppearance } from "../git/pr-status.js"
 import { spaceFolder, checkoutKey, readCheckout } from "../git/checkouts.js";
 import { loadSettings, duration } from "../settings.js";
 import { findNode } from "./find-node.js";
+import { resolvedAgents } from "./agents.js";
 import { TEXT, Icon, IconButton, Badge, Rail, PROJECT_PALETTE, directoryTooltip, projectColor } from "./ui.js";
 import { marquee } from "./marquee.js";
 
@@ -317,9 +320,14 @@ export class Spaces {
       checkoutKey(w, ps) in this.git ||
       Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
-    const list = sp
-      .map((w, i) => ({ w, i, g: this.git[checkoutKey(w, ps)] ?? null, folder: spaceFolder(w, ps) }))
-      .filter((r) => this.shown.has(r.w.id));
+    const effective = resolvedAgents(agents(), terminals(), shared("agent-ring.turnStatus"), shared("agent-ring.unreadDone"));
+    const priority = { blocked: 4, done: 3, working: 2, idle: 1 };
+    const list = sp.map((w, i) => {
+      const statuses = effective.filter(agent => agent.space === w.id).map(agent => agent.status);
+      const status = statuses.reduce((best, current) =>
+        (priority[current] ?? 0) > (priority[best] ?? 0) ? current : best, null) ?? w.status;
+      return { w: status === w.status ? w : { ...w, status }, i, g: this.git[checkoutKey(w, ps)] ?? null, folder: spaceFolder(w, ps) };
+    }).filter((r) => this.shown.has(r.w.id));
     const mains = new Set(list.filter((r) => r.g && !r.g.linked).map((r) => r.g.repo));
     const nested = (r) => r.g?.linked && mains.has(r.g.repo);
     const out = [];

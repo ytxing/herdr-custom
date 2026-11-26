@@ -32,7 +32,7 @@ const readOutcome = String.raw`
       select(.type == "event_msg")
       | select(.payload.type == "task_started" or .payload.type == "task_complete" or .payload.type == "turn_aborted")
       | {outcome: (if .payload.type == "task_complete" then "completed"
-                   elif .payload.type == "task_started" then "stale"
+                   elif .payload.type == "task_started" then "working"
                    elif .payload.reason == "interrupted" then "interrupted" else "stale" end),
          time: (.payload.completed_at | numbers * 1000 // null), timestamp}
     elif $app == "claude" then
@@ -76,6 +76,8 @@ export async function turnOutcome(terminal) {
     const time = exactTime ? record.time : Date.parse(record.time ?? record.timestamp);
     const tolerance = app === "codex" && (!exactTime || machine) ? 30_000 : 2_000;
     // Codex completed_at rounds to seconds; aborts and remote status delivery need more slack.
+    // A latest task_started or abort describes the main thread regardless of transport delay.
+    if (app === "codex" && record.outcome !== "completed") return record.outcome;
     return Number.isFinite(time) && Math.abs(time - current.status_ms) <= tolerance ? record.outcome : null;
   } catch {
     return null;

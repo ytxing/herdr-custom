@@ -4,6 +4,10 @@ import { theme } from "herdr";
 
 const MIN_PERIOD_MS = 6000;
 const MS_PER_PX = 180;
+const TOOLTIP_DELAY_MS = 500;
+// A hover-out is not guaranteed: the row may reorder, the view may switch, or
+// the pointer may leave the window. The label still has to leave on its own.
+const TOOLTIP_LIFETIME_MS = 4000;
 
 function wide(ch) {
   const cp = ch.codePointAt(0);
@@ -24,7 +28,8 @@ function estimate(text) {
 export function clearMarqueeHover(owner) {
   const hover = owner.marqueeHover;
   if (!hover) return false;
-  hover.timer.cancel();
+  hover.timer?.cancel();
+  hover.life?.cancel();
   owner.marqueeHover = undefined;
   return hover.visible;
 }
@@ -37,10 +42,15 @@ function withTooltip(label, owner, key, text) {
         const wasVisible = clearMarqueeHover(owner);
         const hover = { key, x: point.x, visible: false };
         owner.marqueeHover = hover;
-        hover.timer = cx.timer.after(500, (task) => {
+        hover.timer = cx.timer.after(TOOLTIP_DELAY_MS, (cx) => {
           if (owner.marqueeHover !== hover) return;
           hover.visible = true;
-          task.notify();
+          cx.notify();
+          hover.life = cx.timer.after(TOOLTIP_LIFETIME_MS, (cx) => {
+            if (owner.marqueeHover !== hover) return;
+            owner.marqueeHover = undefined;
+            cx.notify();
+          });
         });
         if (wasVisible) cx.notify();
       } else if (!previous.visible) {
