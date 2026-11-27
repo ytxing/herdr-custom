@@ -4,8 +4,11 @@ import Toast, { agentNotice, attentionMessage } from "./toast.js";
 
 const TERMINAL = /^(?:[a-z0-9][a-z0-9_.-]*\/)?t[a-z0-9]+$/;
 const quote = (value) => "'" + value.replace(/'/g, "'\\''") + "'";
+// terminal-notifier reads a line that opens with a bracket as markup and shows no line at all;
+// a backslash before it shows the bracket.
+const literal = (text) => text.replace(/^[[({<【]/, "\\$&");
 
-const readSessionInput = `
+export const readSessionInput = `
   pid=$1 app=$2 session=$3
   pattern= files= entry=
   case "$app" in
@@ -31,7 +34,10 @@ const readSessionInput = `
       case "$session" in *[!a-zA-Z0-9_]*) exit 0 ;; esac
       db="\${XDG_DATA_HOME:-$HOME/.local/share}/opencode/opencode.db"
       [ -f "$db" ] || exit 0
-      sqlite3 -readonly -json "$db" "SELECT json_extract(p.data,'$.text') AS text FROM part p JOIN message m ON m.id=p.message_id WHERE m.session_id='$session' AND json_extract(m.data,'$.role')='user' AND json_extract(p.data,'$.type')='text' ORDER BY m.time_created DESC,p.time_created ASC LIMIT 1;" | jq -r '.[0].text // ""'
+      # OpenCode 2.4 keeps the user's text on the message itself; before, on its text parts.
+      text=$(sqlite3 -readonly -json "$db" "SELECT json_extract(data,'$.text') AS text FROM session_message WHERE session_id='$session' AND type='user' ORDER BY time_created DESC LIMIT 1;" 2>/dev/null | jq -r '.[0].text // ""')
+      [ -n "$text" ] || text=$(sqlite3 -readonly -json "$db" "SELECT json_extract(p.data,'$.text') AS text FROM part p JOIN message m ON m.id=p.message_id WHERE m.session_id='$session' AND json_extract(m.data,'$.role')='user' AND json_extract(p.data,'$.type')='text' ORDER BY m.time_created DESC,p.time_created ASC LIMIT 1;" 2>/dev/null | jq -r '.[0].text // ""')
+      printf '%s\n' "$text"
       exit
       ;;
     *) exit 0 ;;
@@ -77,7 +83,7 @@ const readSessionInput = `
     first(inputs | fromjson? | userContent | text | strings | gsub("[[:space:]]+"; " ") | select(test("[^ ]"))) // ""'
 `;
 
-async function lastInput(address) {
+export async function lastInput(address) {
   try {
     const result = await hc(["get", address, "--json"]);
     if (result.code !== 0) return "";
@@ -87,7 +93,11 @@ async function lastInput(address) {
     if (!['codex', 'pi', 'claude', 'opencode'].includes(app) || !Number.isSafeInteger(pid) || pid <= 0) return "";
     const argv = terminal.foreground?.argv ?? [];
     const sessionFlag = argv.findIndex(arg => arg === "--session" || arg === "-s");
-    const session = sessionFlag >= 0 ? argv[sessionFlag + 1] ?? "" : "";
+    // OpenCode reports its session's id as a 7501 record while it works; the sidebar header
+    // keeps the last one it saw for a terminal, since the report is gone once the turn ends.
+    const reported = Object.keys(terminal.records ?? {}).filter(key => key.startsWith("ses_"));
+    const session = reported.find(key => terminal.records[key].title && terminal.records[key].title === terminal.status?.title) ??
+      reported[0] ?? shared("agent-ring.sessions")?.[address] ?? (sessionFlag >= 0 ? argv[sessionFlag + 1] ?? "" : "");
     const on = address.includes("/") ? address.split("/")[0] : null;
     const input = await exec("sh", ["-c", readSessionInput, "agent-ring", String(pid), app, session], { on, timeout: 2000 });
     return input.code === 0 ? input.stdout : "";
@@ -150,9 +160,9 @@ async function forward(notification) {
   const heading = failed ? notification.title.replace(/ needs you$/, " failed") : notification.title;
   const title = (machine ? `${heading} @${machine}` : heading) || (kind === "done" ? "Agent finished" : "Agent needs your attention");
   const subtitle = session || place;
-  const args = ["-title", title,
+  const args = ["-title", literal(title),
     "-group", `herdr-agent-ring/${address}`, "-activate", "dev.herdr.app", "-execute", focus];
-  if (subtitle) args.push("-subtitle", subtitle);
+  if (subtitle) args.push("-subtitle", literal(subtitle));
   const modDirectory = `${appHome()}/mods/good-agent-notifications`;
   const tasks = [];
   if (config.banner !== false) {
@@ -163,7 +173,7 @@ async function forward(notification) {
         agentImage(terminal, notification.title),
       ]);
       const message = body || (kind === "done" ? "Finished" : failed ? "Agent reported an error" : "Needs your attention");
-      const bannerArgs = ["-message", message, ...args];
+      const bannerArgs = ["-message", literal(message), ...args];
       const withImage = image ? [...bannerArgs, "-contentImage", `file://${encodeURI(image).replace(/#/g, "%23").replace(/\?/g, "%3F")}`] : bannerArgs;
       try {
         if ((await exec(notifier, withImage)).code === 0) return;

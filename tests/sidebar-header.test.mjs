@@ -10,9 +10,9 @@ const host = new Map([
   ["gpui-kit", "export class View {}; export const div = null, image = null, svg = null;"],
   ["gpui-base", "export const h_flex = null, v_flex = null, Input = null, InputState = null, Popover = null, Popup = null, ScrollHandle = null;"],
   ["herdr", `
-    export const { exec, hc, focused, layout, machines, notify, panes, run, setShared, shared,
+    export const { checking, exec, hc, focused, layout, machines, nextCommand, notify, panes, run, setShared, shared,
       terminals, window } = globalThis.herdrTestHost;
-    export const agents = null, checking = null, closeOverlay = null, nextCommand = null, props = null,
+    export const agents = null, closeOverlay = null, props = null,
       openOverlay = null, settings = null, setAgentOrder = null, spaces = null, theme = null, updates = null;
   `],
 ]);
@@ -37,6 +37,7 @@ let shownTerminals;
 let dispatch;
 
 globalThis.herdrTestHost = {
+  checking: () => false,
   exec: (program, args, options = {}) => {
     executedOn = options.on ?? null;
     return {
@@ -60,6 +61,7 @@ globalThis.herdrTestHost = {
   focused: () => ({ terminal: address, tab: "tab" }),
   layout: () => ({ toast: "good-agent-notifications" }),
   machines: () => [{ name: null, layout: "ready" }],
+  nextCommand: () => new Promise(() => {}),
   notify: alert => alerts.push(alert),
   panes: () => (shownTerminals ?? [terminal]).map(entry => ({ tab: "tab", terminal: entry.address })),
   run: (command, args) => dispatch(command, args),
@@ -168,6 +170,79 @@ for (const { name, outcome, events, subagent, source, remote, timestampOffsetMs 
     assert.equal(executedOn, remote ? "remote-host" : null);
   });
 }
+
+test("an off-screen window learns of a finished turn from the tick, with nothing rendering", async t => {
+  // Covered, on another Space or minimized: no frame is drawn, so render never runs.
+  active = false;
+  address = "t9";
+  terminal.address = "t1";
+  t.after(() => { active = true; settings.delete("agent-ring.unreadDone"); });
+  fixture = mkdtempSync(join(tmpdir(), "herdr-turn-outcome-"));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const sessions = join(fixture, "sessions", "2026", "11", "23");
+  mkdirSync(sessions, { recursive: true });
+  writeFileSync(join(fixture, "lsof"), '#!/bin/sh\nprintf "%s\\n" "$TEST_CODEX_FILES"\n', { mode: 0o755 });
+  const rollout = join(sessions, "rollout-main.jsonl");
+  writeFileSync(rollout, [
+    { type: "session_meta", payload: { thread_source: "user" } },
+    { timestamp: time, type: "event_msg", payload: completed },
+  ].map(line => JSON.stringify(line)).join("\n") + "\n");
+  files = [`n${rollout}`];
+
+  alerts = [];
+  settings.delete("agent-ring.unreadDone");
+  terminal.turn = 1;
+  terminal.report = { app: "codex", state: "working" };
+  let tick;
+  const chrome = newChrome();
+  chrome.init({}, { spawn: () => {}, timer: { every: (_ms, handler) => { tick = handler; } } });
+  assert.equal(typeof tick, "function");
+  const tasks = [];
+  const cx = { spawn: task => tasks.push(task()) };
+  tick(cx);
+  terminal.turn++;
+  terminal.report = { app: "codex", state: "idle" };
+  // Herdr's own toast arrived first, and was held for the turn.
+  chrome.holdDone(terminal.address);
+  tick(cx);
+  await Promise.all(tasks);
+
+  assert.deepEqual(alerts.map(alert => alert.title), ["codex finished"]);
+  assert.deepEqual(settings.get("agent-ring.unreadDone"), { t1: true });
+  assert.deepEqual(settings.get("agent-ring.turnStatus")?.[terminal.address], { turn: terminal.turn, status: "done" });
+});
+
+test("an OpenCode session's id is kept from its report, which is gone once it is idle", async t => {
+  const local = {
+    address: "t1", state: "live", turn: 1, report: { app: "opencode", state: "working" },
+    status: { app: "opencode", state: "working", title: "Fix login" },
+    // A sub-agent's session is reported beside the one the terminal shows.
+    records: { ses_docs: { state: "working", title: "Write docs" }, ses_login: { state: "working", title: "Fix login" } },
+  };
+  address = local.address;
+  shownTerminals = [local];
+  settings.delete("agent-ring.sessions");
+  t.after(() => {
+    shownTerminals = undefined;
+    settings.delete("agent-ring.sessions");
+  });
+
+  const chrome = newChrome();
+  const tasks = [];
+  const cx = { spawn: task => tasks.push(task()) };
+  chrome.observeAgents(cx);
+  await Promise.all(tasks);
+  assert.deepEqual(settings.get("agent-ring.sessions"), { t1: "ses_login" });
+
+  local.turn++;
+  local.report = { app: "opencode", state: "idle" };
+  local.status = { app: "opencode", state: "idle" };
+  delete local.records;
+  const again = [];
+  chrome.observeAgents({ spawn: task => again.push(task()) });
+  await Promise.all(again);
+  assert.deepEqual(settings.get("agent-ring.sessions"), { t1: "ses_login" });
+});
 
 test("native done is downgraded only by a resolution for the same turn", () => {
   const all = [{ address: "t1", turn: 7 }];

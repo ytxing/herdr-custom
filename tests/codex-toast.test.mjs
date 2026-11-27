@@ -96,3 +96,27 @@ for (const { name, resolution, shown, resolutionTurn = 2, title, app = "codex" }
   if (shown) assert.ok(externalCalls.length > 0);
   else assert.deepEqual(externalCalls, []);
 });
+
+test("a banner line that opens with a bracket reaches the notifier escaped", async () => {
+  terminal = {
+    address: "t1", state: "live", turn: 2, title: "OpenCode",
+    report: { app: "opencode", state: "blocked", title: "[WIP] Session", msg: "[Image 1] Waiting for your answer" },
+  };
+  notification = {
+    title: "OpenCode needs you", body: "Session", level: "error", overlay: "toast-1",
+    action: { name: "agent.focus", args: { terminal: "t1" } },
+  };
+  externalCalls = [];
+  const toast = new AgentRingToast();
+  const tasks = [];
+  toast.init({}, { spawn: task => tasks.push(task()), notify: () => {} });
+  await Promise.all(tasks);
+
+  const sent = externalCalls.filter(([program]) => program.endsWith("terminal-notifier"));
+  assert.ok(sent.length > 0);
+  for (const [, args] of sent) {
+    assert.equal(args[args.indexOf("-message") + 1], "\\[Image 1] Waiting for your answer");
+    assert.equal(args[args.indexOf("-subtitle") + 1], "\\[WIP] Session");
+    assert.equal(args[args.indexOf("-title") + 1], "OpenCode needs you");
+  }
+});

@@ -40,6 +40,10 @@ export default class WorkspaceChrome extends View {
     if (config?.footer || checking()) return;
     this.pendingDone = new Map();
     this.heldDone = new Map();
+    // Off screen (covered, on another Space, minimized) the window draws no frames, so render
+    // isn't there to notice a finished turn, and a toast held for Codex would wait for it. A slow
+    // tick keeps watching in render's place.
+    cx.timer.every(1000, cx => this.observeAgents(cx));
     cx.spawn(async () => {
       for (;;) {
         const command = await nextCommand();
@@ -67,6 +71,18 @@ export default class WorkspaceChrome extends View {
     const active = window()?.active;
     const previous = this.previousView;
     const all = new Map(terminals().map(term => [term.address, term]));
+    // OpenCode names its session only while work is going on, and the completion toast needs it after.
+    const sessions = { ...shared("agent-ring.sessions") };
+    let sessionsChanged = false;
+    for (const [id, terminal] of all) {
+      const reported = Object.keys(terminal.records ?? {}).filter(key => key.startsWith("ses_"));
+      const session = reported.find(key => terminal.records[key].title && terminal.records[key].title === terminal.status?.title) ?? reported[0];
+      if (session && sessions[id] !== session) {
+        sessions[id] = session;
+        sessionsChanged = true;
+      }
+    }
+    if (sessionsChanged) cx.spawn(() => setShared("agent-ring.sessions", sessions));
     const allPanes = panes();
     const visible = new Set(allPanes.filter(pane => pane.tab === focus?.tab).map(pane => pane.terminal));
     if (address) visible.add(address);
