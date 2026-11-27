@@ -299,7 +299,8 @@ export class Agents {
     const color = t[a.status] ?? t.dim;
     if (a.status === "working") {
       const phase = [...(a.address ?? "")].reduce((value, char) => (value * 33 + char.codePointAt(0)) >>> 0, 5381);
-      // One 0.3-1.0 swing for every agent; the hash sets direction and period.
+      // One 0.3-1.0 swing for every agent; the hash sets direction and period
+      // (1.5-3.1 s, so a fleet of agents does not breathe in lockstep).
       const low = 0.3;
       const high = 1;
       const reversed = (phase & 1) === 1;
@@ -312,7 +313,7 @@ export class Agents {
         .rounded(4)
         .bg(tint)
         .accessibility_label("Working")
-        .loop("opacity", { from: reversed ? high : low, to: reversed ? low : high, period: 2000 + (phase % 2001) });
+        .loop("opacity", { from: reversed ? high : low, to: reversed ? low : high, period: 1538 + (phase % 1539) });
     }
     if (a.status === "blocked" && compact)
       return div()

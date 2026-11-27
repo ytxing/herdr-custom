@@ -226,7 +226,7 @@ export default class Tabs extends View {
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openOverlay({ mod: "menu", kind: "popup", width: 200, props: { tab: "tab", target: { id: c.id, space: space.id } } }); })
         .child(div().w(16).h(16).flex_none().flex().items_center().justify_center().rounded(4)
           .bg(working ? tint + "4d" : t.foreground + "1f")
-          .when(working, el => el.loop("opacity", { from: 0.35, to: 1, period: 1800 }))
+          .when(working, el => el.loop("opacity", { from: 0.35, to: 1, period: 1385 }))
           .text_size(11).text_color(c.active ? t.foreground : t.dim).child(String(i + 1)))
         .child(this.tabText(c, c.zoomed ? `${name} Z` : name))
         .when(working, el => el.child(svg("mods/good-agent-sidebar-header/spinner.svg").size(12).flex_none().text_color(tint).spin(900)))

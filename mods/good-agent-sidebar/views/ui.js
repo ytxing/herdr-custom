@@ -110,7 +110,7 @@ export function GroupHeader({
       div().w(16).h(16).flex_none().flex().items_center().justify_center()
         .rounded(RADIUS.small)
         .bg(numberColor ? numberColor + "4d" : t.foreground + "1f")
-        .when(numberBreathing, (e) => e.loop("opacity", { from: 0.35, to: 1, period: 1800 }))
+        .when(numberBreathing, (e) => e.loop("opacity", { from: 0.35, to: 1, period: 1385 }))
         .text_size(TEXT.caption)
         .text_color(prominent ? t.foreground : t.dim)
         .child(String(number)),
